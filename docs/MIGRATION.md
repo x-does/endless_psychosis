@@ -25,3 +25,12 @@ For hot-reload development, install Node 22 and run `npm ci`, then `npm run dev:
 Reference threads:
 - Endless: `fe535b6b-ce43-4034-b051-d03051e786b2` on MI.
 - Letscook: `import:codex:01a12f42-3d0c-7f22-a26e-a0268f974deb` on HP.
+
+## Verified handover
+
+- HP: production Docker app and MariaDB running; `/health/db` reports connected.
+- Passed TypeScript and production build, SPA routes, API validation, cloud-save write/read and revision increment checks.
+- MI: Vite/API processes stopped, `endless-db` stopped with container/data retained, dedicated Endless Cloudflare tunnel stopped. Tools confirmed no listeners on 3000, 5173 or 8098 at shutdown.
+- MI database inspection found `endless_saves` empty (zero rows).
+- Private original backup and prepared source ZIP/Git bundle are under HP's ignored `private/` directory.
+- GitHub publication attempted, but the stored HP credential for `SavuSavu` received HTTP 403 on `x-does/endless_psychosis`; repository write access is required to publish.
