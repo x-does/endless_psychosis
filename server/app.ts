@@ -6,7 +6,6 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { createDatabase, ensureSchema, getDb, pingDatabase } from "./db.js";
-import { saves } from "./schema.js";
 
 const APP_VERSION = process.env.APP_VERSION ?? "0.1.0";
 
@@ -59,7 +58,8 @@ function asyncRoute(
 }
 
 export function createApp(options: { staging?: boolean; dist?: string; commit?: string } = {}): express.Express {
-  const database = options.staging ? createDatabase("DEV_") : { getDb, ensureSchema, pingDatabase };
+  const database = createDatabase(options.staging);
+  const { saves } = database;
   const { getDb: appDb, pingDatabase: appPing } = database;
   const ready = database.ensureSchema();
   ready.catch((error) => console.error("[endless] database preparation failed", error));

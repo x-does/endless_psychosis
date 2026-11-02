@@ -17,14 +17,9 @@ Keep the website attached to **main**. Keep the build command `npm ci --include=
 
 ```dotenv
 BUILD_STAGING=1
-DEV_DB_HOST=localhost
-DEV_DB_PORT=3306
-DEV_DB_NAME=YOUR_NEW_STAGING_DATABASE
-DEV_DB_USER=YOUR_NEW_STAGING_DATABASE_USER
-DEV_DB_PASSWORD=YOUR_NEW_STAGING_DATABASE_PASSWORD
 ```
 
-Create a dedicated staging database/user in hPanel. Never reuse production credentials. If DEV_DB settings are absent, staging is playable with isolated browser-local saves, but cloud save is disabled; there is no fallback to production DB settings. `/dev/health/db` must say connected before testing cloud saves.
+Use the existing DB_* credentials in hPanel. Staging creates and uses `endless_dev_saves`; production continues using `endless_saves`. No new database, user, or DEV_DB_* settings are needed. Production rows are never copied into staging. `/dev/health/db` must say connected before testing cloud saves.
 
 The initial infrastructure PR must be promoted to main with owner approval once. Until that happens, the existing main application cannot serve an independent staging build. Afterward the build downloads the public dev branch at an exact commit, builds its frontend with `/dev/` paths and bundles its server, and mounts both under `/dev`. `/dev/health` reports the pinned staging commit. Main dependencies must remain compatible with staged server dependencies; dependency changes may require a coordinated infrastructure update.
 
@@ -38,7 +33,7 @@ The build fetches public GitHub source without credentials. It fails rather than
 
 - Production browser keys stay `endless.save.v1` and `endless.cloud.code`.
 - Staging uses `endless.dev.save.v1` and `endless.dev.cloud.code`, and `/dev/api/save`.
-- Staging uses only DEV_DB_* configuration; production uses DB_*.
+- Both use DB_* configuration, with separate tables: `endless_dev_saves` for staging and `endless_saves` for production.
 - Root production routes and staging assets are built separately.
 
 Verify `/health`, `/health/db`, `/dev/health`, `/dev/health/db`, and ensure staging HTML uses `/dev/assets/`. Record the staging commit from `/dev/health` when requesting approval.
