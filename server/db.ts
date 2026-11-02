@@ -4,12 +4,13 @@ import * as schema from "./schema.js";
 
 export type Database = MySql2Database<typeof schema>;
 
-export function createDatabase(prefix = "") {
+export function createDatabase(staging = false) {
+const saves = schema.createSavesTable(staging);
 let pool: mysql.Pool | null = null;
 let database: Database | null = null;
 
 function env(name: string): string | undefined {
-  const value = process.env[prefix + name];
+  const value = process.env[name];
   return value && value.trim() ? value.trim() : undefined;
 }
 
@@ -42,7 +43,7 @@ async function ensureSchema(): Promise<void> {
   const db = getDb();
   if (!db) return;
   await db.execute(`
-    CREATE TABLE IF NOT EXISTS endless_saves (
+    CREATE TABLE IF NOT EXISTS ${staging ? "endless_dev_saves" : "endless_saves"} (
       id VARCHAR(64) NOT NULL PRIMARY KEY,
       player_name VARCHAR(80) NOT NULL,
       data JSON NOT NULL,
@@ -59,7 +60,7 @@ async function pingDatabase(): Promise<boolean> {
   await db.execute("SELECT 1");
   return true;
 }
-return { getDb, ensureSchema, pingDatabase };
+return { getDb, ensureSchema, pingDatabase, saves };
 }
 
 export const { getDb, ensureSchema, pingDatabase } = createDatabase();
