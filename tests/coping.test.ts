@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { COPING, CopingState } from "../src/game/coping.ts";
+import { COPING, CopingState, effectPhaseSeconds } from "../src/game/coping.ts";
 
 test("three recent hits trigger a choice, and old hits leave the window", () => {
   const state = new CopingState();
@@ -52,6 +52,13 @@ test("pulse boost expires exactly at the benefit boundary", () => {
   assert.equal(state.damageMultiplier, 2);
   state.tick(5);
   assert.equal(state.damageMultiplier, 1);
+});
+
+test("HUD timer shows benefit duration separately from aftermath", () => {
+  assert.equal(effectPhaseSeconds("push", 12, false), 5);
+  assert.equal(effectPhaseSeconds("numb", 12, false), 4);
+  assert.equal(effectPhaseSeconds("bottle", 12, false), 6);
+  assert.equal(effectPhaseSeconds("push", 7, true), 7);
 });
 
 test("healthy recovery works without a focus resource and strain stays bounded", () => {

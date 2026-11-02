@@ -37,6 +37,9 @@ export const COPING: Record<CopingId, CopingDef> = {
 export const HEALTHY: CopingId[] = ["ground", "compassion", "connect"];
 export const SHORTCUTS: CopingId[] = ["bottle", "push", "numb"];
 export const strainState = (strain: number) => strain < 30 ? "Anchored" : strain < 65 ? "On edge" : "Fractured";
+export function effectPhaseSeconds(id: CopingId, remaining: number, aftermath: boolean) {
+  return Math.ceil(Math.max(0, remaining - (aftermath ? 0 : COPING[id].afterSeconds)));
+}
 
 /** All clocks use active simulation time, never wall time. Pausing freezes debt too. */
 export class CopingState {

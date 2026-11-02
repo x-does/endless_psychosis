@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SAVE_KEY } from "./game/environment";
-import { COPING, SCENARIOS, type CopingId, type CopingOffer } from "./game/coping";
+import { COPING, SCENARIOS, effectPhaseSeconds, type CopingId, type CopingOffer } from "./game/coping";
 import {
   CHAPTERS,
   CONTENT_NOTE,
@@ -697,6 +697,7 @@ function TitleScreen({
         <span className="orb orb-b" />
         <span className="orb orb-c" />
       </div>
+      <div className="title-landscape" aria-hidden="true"><span className="answering-window" /><span className="title-road" /></div>
       <div className="title-content">
         <div className="eyebrow">A psychological survival runner</div>
         <h1 className="game-title">ENDLESS</h1>
@@ -1500,9 +1501,33 @@ function GameScreen({
     : 0;
   const cooldownLeft = snapshot ? Math.ceil(snapshot.activeCooldown) : 0;
   const activeReady = snapshot ? snapshot.activeCooldown <= 0 : false;
+  const copingDialogRef = useRef<HTMLElement | null>(null);
+  const gameScreenRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!copingOffer) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = copingDialogRef.current;
+    const siblings = [...(gameScreenRef.current?.children ?? [])].filter(el => !el.classList.contains("coping-overlay")) as HTMLElement[];
+    siblings.forEach(el => { el.inert = true; });
+    dialog?.focus();
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !dialog) return;
+      const buttons = [...dialog.querySelectorAll<HTMLButtonElement>("button")];
+      const first = buttons[0], last = buttons.at(-1);
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    dialog?.addEventListener("keydown", trap);
+    return () => {
+      siblings.forEach(el => { el.inert = false; });
+      dialog?.removeEventListener("keydown", trap);
+      if (previous?.isConnected && previous !== document.body) previous.focus();
+      else gameScreenRef.current?.querySelector<HTMLButtonElement>(".hud-btn")?.focus();
+    };
+  }, [copingOffer]);
 
   return (
-    <div className={`game-screen state-${(snapshot?.mentalState ?? "Anchored").toLowerCase().replace(" ", "-")}`}>
+    <div ref={gameScreenRef} className={`game-screen state-${(snapshot?.mentalState ?? "Anchored").toLowerCase().replace(" ", "-")}`}>
       <canvas ref={canvasRef} className="game-canvas" />
 
       <div className="hud">
@@ -1578,8 +1603,11 @@ function GameScreen({
         <div className="strain-panel">
           <div className="strain-heading"><span>STRAIN · {snapshot?.mentalState ?? "Anchored"}</span><strong>{snapshot?.strain ?? 18}/100</strong></div>
           <div className="strain-track" role="meter" aria-label="Strain" aria-valuemin={0} aria-valuemax={100} aria-valuenow={snapshot?.strain ?? 18}><span style={{ width: `${snapshot?.strain ?? 18}%` }} /></div>
+          {snapshot?.appearance && <div className="appearance-readout" aria-label="Appearance blend">
+            <strong>{snapshot.appearance.form === "human" ? "Human" : snapshot.appearance.form === "mixed" ? "Mixed form" : snapshot.appearance.form === "radiance" ? "Light mote" : snapshot.appearance.form === "echo" ? "Ghost echo" : "Skeletal echo"}</strong>
+          </div>}
           {snapshot?.coping && <div className={`coping-status ${COPING[snapshot.coping.id].kind}`}>
-            <strong>{COPING[snapshot.coping.id].icon} {COPING[snapshot.coping.id].name} · {snapshot.coping.aftermath ? "After-effect" : "Active"} · {Math.ceil(snapshot.coping.remaining)}s</strong>
+            <strong>{COPING[snapshot.coping.id].icon} {COPING[snapshot.coping.id].name} · {snapshot.coping.aftermath ? "After-effect" : "Benefit"} · {effectPhaseSeconds(snapshot.coping.id, snapshot.coping.remaining, snapshot.coping.aftermath)}s</strong>
             <span>{snapshot.coping.aftermath ? COPING[snapshot.coping.id].cost : COPING[snapshot.coping.id].benefit}</span>
           </div>}
         </div>
@@ -1718,6 +1746,7 @@ function GameScreen({
               Progress is saved when you leave. You can always come back.
             </p>
             <details className="coping-guide"><summary>Coping field guide · benefits & costs</summary>
+              <p>Appearance remembers recent experiences: Radiance, Echo and Bone mix independently and fade as you move. Forms are symbolic, not judgments. The outlined footprint always shows your unchanged collision space—even as a light mote.</p>
               {Object.values(COPING).map(def => <p key={def.id}><strong>{def.icon} {def.name}</strong><br />{def.benefit}<br /><span className="muted">{def.cost}</span></p>)}
             </details>
             <div className="pause-actions">
@@ -1739,7 +1768,7 @@ function GameScreen({
       )}
 
       {copingOffer && <div className="overlay coping-overlay">
-        <section className="modal-card coping-card" role="dialog" aria-modal="true" aria-labelledby="coping-title" aria-describedby="coping-story">
+        <section ref={copingDialogRef} tabIndex={-1} className="modal-card coping-card" role="dialog" aria-modal="true" aria-labelledby="coping-title" aria-describedby="coping-story">
           <div className="eyebrow">The road is paused · your choice</div>
           <h2 id="coping-title">{copingOffer.title}</h2>
           <p id="coping-story" className="muted">{copingOffer.story}</p>
