@@ -126,6 +126,23 @@ export class Sfx {
   click() {
     this.tone(540, 0.05, "square", 0.025);
   }
+  coping(shortcut: boolean) {
+    this.tone(shortcut ? 120 : 330, 0.7, "sine", 0.035, shortcut ? 75 : 495);
+    this.tone(shortcut ? 127 : 440, 0.55, "triangle", 0.018, undefined, 0.12);
+  }
+  rebound() {
+    this.tone(180, 0.65, "triangle", 0.025, 100);
+  }
+  atmosphere(strain: number, shortcut = false) {
+    // Quiet, bounded motifs; no voices, jump scares or sustained unmanaged nodes.
+    const base = shortcut ? 65 : 82;
+    this.tone(base, 0.55, "sine", 0.008 + strain * 0.00012, base * 0.94);
+    if (strain > 35) this.tone(base * 1.06, 0.35, "sine", 0.012, undefined, 0.18);
+  }
+  destroy() {
+    if (this.ctx) void this.ctx.close();
+    this.ctx = null;
+  }
 }
 
 export function haptic(enabled: boolean, pattern: number | number[]) {

@@ -10,6 +10,7 @@ import {
 } from "./content";
 import { haptic, Sfx } from "./audio";
 import { xpForLevel, type DerivedStats } from "./save";
+import { COPING, CopingState, SCENARIOS, strainState, type CopingId, type CopingOffer } from "./coping";
 
 export type Phase = "run" | "boss" | "complete" | "dead";
 
@@ -41,6 +42,9 @@ export interface RunSnapshot {
   enemiesDefeated: number;
   sparks: number;
   time: number;
+  strain: number;
+  mentalState: string;
+  coping: { id: CopingId; remaining: number; aftermath: boolean } | null;
 }
 
 export interface RunResult {
@@ -67,6 +71,7 @@ export interface EngineCallbacks {
   onToast: (text: string, tone?: "good" | "bad" | "info") => void;
   onBossStart: (boss: BossSnapshot) => void;
   onPauseRequest: () => void;
+  onCopingOffer: (offer: CopingOffer) => void;
 }
 
 export interface EngineOptions {
@@ -242,6 +247,11 @@ export class GameEngine {
   private cb: EngineCallbacks;
   private opts: EngineOptions;
   private sfx: Sfx;
+  private coping = new CopingState();
+  private offeredChoices: CopingOffer | null = null;
+  private scenarioShown = false;
+  private atmosphereBeat = 0;
+  private rescueTimer = 0;
 
   W = 800;
   H = 600;
@@ -342,7 +352,7 @@ export class GameEngine {
         break;
       case "KeyP":
       case "Escape":
-        this.cb.onPauseRequest();
+        if (!this.coping.offered) this.cb.onPauseRequest();
         break;
     }
   };
@@ -482,10 +492,41 @@ export class GameEngine {
     cancelAnimationFrame(this.raf);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
+    this.sfx.destroy();
   }
 
   private get slowFactor() {
-    return this.slowTimer > 0 ? 0.55 : 1;
+    return this.slowTimer > 0 || (this.coping.effect === "numb" && this.coping.boosting) ? 0.55 : 1;
+  }
+
+  chooseCoping(id: CopingId | null) {
+    const offer = this.offeredChoices;
+    if (!offer || (id && id !== offer.healthy && id !== offer.shortcut)) return;
+    if (!this.coping.choose(id)) return;
+    this.offeredChoices = null;
+    if (id) {
+      const def = COPING[id];
+      if (id === "ground") {
+        this.focus = Math.min(this.maxFocus, this.focus + 20);
+        this.projectiles = this.projectiles.filter(p => p.kind === "calm");
+      }
+      if (id === "compassion") this.hp = Math.min(this.maxHp, this.hp + 16);
+      this.sfx.coping(def.kind === "shortcut");
+      this.cb.onToast(`${def.name}: ${def.cue}`, def.kind === "healthy" ? "good" : "info");
+    }
+    this.setPaused(false);
+    this.emitSnapshot();
+  }
+
+  private offerCoping(stumble = false) {
+    if (this.levelPaused || this.phase === "dead" || this.phase === "complete" || !this.coping.offer()) return;
+    const index = this.chapterIndex < 2 ? 0 : this.chapterIndex < 4 ? 1 : 2;
+    const scenario = SCENARIOS[index];
+    this.offeredChoices = stumble ? { ...scenario, title: "Three stumbles. A moment to choose.", story: "The shadows press closer. Relief is within reach, but not every kind of relief helps you recover. Read what each choice gives—and what it takes." } : scenario;
+    this.setPaused(true);
+    this.sfx.coping(false);
+    this.cb.onCopingOffer(this.offeredChoices);
+    this.emitSnapshot();
   }
 
   private playerRect() {
@@ -533,7 +574,7 @@ export class GameEngine {
   pulse() {
     if (this.paused || this.phase === "dead" || this.phase === "complete") return;
     if (this.activeCooldown > 0) return;
-    const cost = 18;
+    const cost = this.coping.pulseCost;
     if (this.focus < cost) {
       this.cb.onToast("Not enough focus. Breathe.", "bad");
       return;
@@ -551,7 +592,7 @@ export class GameEngine {
       maxR: (132 + this.stats.pulseRadius) * this.scale,
       life: 0.38,
       maxLife: 0.38,
-      damage: 1,
+      damage: this.coping.damageMultiplier,
       color: this.chapter.accent,
       hit: new Set(),
       hitBoss: false,
@@ -572,7 +613,7 @@ export class GameEngine {
       vy: beamVy,
       r: 13 * this.scale,
       color: this.chapter.accent,
-      damage: 0,
+      damage: this.coping.damageMultiplier,
       kind: "calm",
       t: 0,
     });
@@ -588,6 +629,8 @@ export class GameEngine {
     const tech = this.active;
     this.activeCooldown = this.activeMax;
     this.techniquesUsed++;
+    this.coping.recover(10);
+    this.coping.hits = [];
     this.sfx.technique();
     haptic(this.opts.haptics, [15, 30, 15]);
     this.applyActiveEffect(tech);
@@ -848,6 +891,34 @@ export class GameEngine {
       return;
     }
 
+    const wasAftermath = this.coping.aftermath;
+    const previousEffect = this.coping.effect;
+    this.coping.tick(dt);
+    if (this.coping.aftermath && !wasAftermath) {
+      this.sfx.rebound();
+      this.cb.onToast(`${this.coping.def?.name}: after-effect. ${this.coping.def?.cost}`, "info");
+    } else if (previousEffect && !this.coping.effect) {
+      this.sfx.heal();
+      this.cb.onToast("The effect passes. The next step is yours.", "good");
+    }
+    this.atmosphereBeat -= dt;
+    if (this.atmosphereBeat <= 0) {
+      this.atmosphereBeat = 2.8 - this.coping.strain / 65;
+      this.sfx.atmosphere(this.coping.strain, this.coping.def?.kind === "shortcut");
+    }
+    if (!this.scenarioShown && this.distance >= this.target * 0.24 && this.phase === "run" && this.coping.canOffer()) {
+      this.scenarioShown = true;
+      this.offerCoping();
+      if (this.paused) return;
+    }
+    this.rescueTimer -= dt;
+    if (this.coping.strain >= 75 && this.rescueTimer <= 0 && this.phase === "run") {
+      this.rescueTimer = 7;
+      const baseY = this.groundY - 30 * this.scale;
+      this.pickups.push({ uid: this.uid++, kind: "breath", x: this.W + 30, y: baseY, baseY, r: 12 * this.scale, t: 0, taken: false });
+    }
+    if (this.coping.effect === "ground" && this.coping.boosting) this.projectiles = this.projectiles.filter(p => p.kind === "calm");
+
     this.runSpeed =
       (330 + this.chapter.difficulty * 16 + Math.min(this.elapsed * 1.6, 130)) *
       this.scale *
@@ -880,9 +951,12 @@ export class GameEngine {
     this.scroll += this.runSpeed * dt;
     this.updatePlayer(dt);
     this.updateEnemies(dt);
+    if (this.paused) return;
     this.updateObstacles(dt);
+    if (this.paused) return;
     this.updatePickups(dt);
     this.updateProjectiles(dt);
+    if (this.paused) return;
     this.updateWaves(dt);
     this.updateParticles(dt);
     this.updatePopups(dt);
@@ -910,7 +984,7 @@ export class GameEngine {
 
     this.focus = Math.min(
       this.maxFocus,
-      this.focus + this.stats.focusRegen * dt,
+      this.focus + this.stats.focusRegen * this.coping.regenFactor * dt,
     );
 
     this.hp = Math.min(this.maxHp, this.hp);
@@ -1110,17 +1184,22 @@ export class GameEngine {
         break;
       }
       case "breath":
+        this.coping.recover(12);
+        this.coping.hits = [];
         this.focus = Math.min(this.maxFocus, this.focus + 34);
         this.burst(p.x, p.y, "#8ecbff", 8);
         this.popup(p.x, p.y - 10, "+34 focus", "#8ecbff", 0.9, 13 * this.scale);
         break;
       case "heart":
+        this.coping.recover(10);
+        this.coping.hits = [];
         this.hp = Math.min(this.maxHp, this.hp + 18);
         this.burst(p.x, p.y, "#ff9db0", 8);
         this.popup(p.x, p.y - 10, "+18", "#ff9db0", 0.9, 14 * this.scale);
         this.sfx.heal();
         break;
       case "shield":
+        this.coping.recover(8);
         this.shieldTimer = Math.max(this.shieldTimer, 6);
         this.burst(p.x, p.y, "#9fe0ff", 10);
         this.popup(p.x, p.y - 10, "Shielded", "#9fe0ff", 0.9, 13 * this.scale);
@@ -1146,7 +1225,7 @@ export class GameEngine {
             p.y + p.r >= b.y &&
             p.y - p.r <= b.y + b.h
           ) {
-            this.damageBoss(3);
+            this.damageBoss(3 * p.damage);
             this.burst(p.x, p.y, p.color, 10);
             hit = true;
           }
@@ -1160,7 +1239,7 @@ export class GameEngine {
               p.y + p.r >= e.y &&
               p.y - p.r <= e.y + e.h
             ) {
-              this.damageEnemy(e, 1);
+              this.damageEnemy(e, p.damage);
               this.burst(p.x, p.y, p.color, 6);
               hit = true;
               break;
@@ -1654,6 +1733,8 @@ export class GameEngine {
       5,
     );
     if (b.hp <= 0) {
+      this.coping.recover(25);
+      this.coping.hits = [];
       b.hp = 0;
       b.dead = true;
       this.burst(b.x + b.w / 2, b.y + b.h / 2, b.def.accent, 70);
@@ -1685,13 +1766,16 @@ export class GameEngine {
 
   private hurt(amount: number) {
     if (
+      this.paused ||
       this.phase === "dead" ||
       this.phase === "complete" ||
       this.invulnTimer > 0 ||
       this.shieldTimer > 0
+      || ((this.coping.effect === "connect" || this.coping.effect === "bottle") && this.coping.boosting)
     )
       return;
-    const dmg = Math.max(1, Math.round(amount * (1 - this.stats.damageReduce)));
+    const protection = this.coping.effect === "compassion" && this.coping.boosting ? 0.8 : 1;
+    const dmg = Math.max(1, Math.round(amount * (1 - this.stats.damageReduce) * protection));
     this.hp -= dmg;
     this.invulnTimer = 1.15;
     this.shake = 16;
@@ -1708,8 +1792,9 @@ export class GameEngine {
       18 * this.scale,
     );
     this.burst(this.player.x, this.player.y - 26 * this.scale, "#ff8a9a", 12);
-    this.emitSnapshot();
     if (this.hp <= 0) this.die();
+    else if (this.coping.stumble()) this.offerCoping(true);
+    this.emitSnapshot();
   }
 
   private die() {
@@ -1756,6 +1841,9 @@ export class GameEngine {
       enemiesDefeated: this.enemiesDefeated,
       sparks: this.sparksCollected,
       time: Math.round(this.elapsed),
+      strain: Math.round(this.coping.strain),
+      mentalState: strainState(this.coping.strain),
+      coping: this.coping.effect ? { id: this.coping.effect, remaining: this.coping.remaining, aftermath: this.coping.aftermath } : null,
     });
   }
 
@@ -1850,7 +1938,7 @@ export class GameEngine {
     for (const p of this.popups) this.drawPopup(ctx, p);
     ctx.restore();
 
-    if (this.flash > 0) {
+    if (this.flash > 0 && !this.opts.reduceMotion) {
       ctx.save();
       ctx.globalAlpha = Math.min(0.5, this.flash);
       ctx.fillStyle = "#ffffff";
@@ -1869,6 +1957,28 @@ export class GameEngine {
     g.addColorStop(1, c);
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
+
+    const def = this.coping.def;
+    const strain = this.coping.strain / 100;
+    const tint = def?.color ?? (strain > 0.65 ? "#873e73" : "#415774");
+    ctx.save();
+    ctx.globalAlpha = def ? 0.15 : 0.05 + strain * 0.14;
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, W, this.groundY);
+    // Fractures stay in the distant sky, never across the playable lane.
+    ctx.strokeStyle = def?.color ?? "#b59abf";
+    ctx.globalAlpha = 0.08 + strain * 0.2;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i++) {
+      const x = W * (i + 0.5) / 5;
+      const drift = this.opts.reduceMotion ? 0 : Math.sin(this.elapsed * 0.3 + i) * strain * 12;
+      ctx.beginPath();
+      ctx.moveTo(x + drift, 0);
+      ctx.lineTo(x - 18, H * 0.12);
+      ctx.lineTo(x + 12 + drift, H * (0.18 + strain * 0.12));
+      ctx.stroke();
+    }
+    ctx.restore();
 
     for (const s of this.stars) {
       const x = ((s.x * W - this.scroll * s.sp * 0.04) % W + W) % W;
@@ -1959,7 +2069,7 @@ export class GameEngine {
     const feet = p.y;
     const bodyTop = feet - h;
     const blink = this.invulnTimer > 0 && Math.floor(this.invulnTimer * 14) % 2 === 0;
-    const accent = this.chapter.accent;
+    const accent = this.coping.def?.color ?? (this.coping.strain >= 65 ? "#efadc8" : this.chapter.accent);
 
     ctx.save();
     ctx.globalAlpha = 0.28;
@@ -2416,7 +2526,7 @@ export class GameEngine {
 
   private drawPickup(ctx: CanvasRenderingContext2D, p: Pickup) {
     const s = this.scale;
-    const pulse = 1 + Math.sin(p.t * 4) * 0.08;
+    const pulse = this.opts.reduceMotion ? 1 : 1 + Math.sin(p.t * 4) * 0.08;
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.scale(pulse, pulse);
