@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync, rmSync } from "node:fs";
 import path from "node:path";
 
 const root = process.cwd();
-execFileSync("npm", ["run", "build:app"], { stdio: "inherit" });
+execFileSync("npm", ["run", "build:app"], { stdio: "inherit", env: { ...process.env, VITE_SATIRE: "0" } });
 if (process.env.BUILD_STAGING !== "1") process.exit(0);
 const response = await fetch("https://api.github.com/repos/x-does/endless_psychosis/commits/dev");
 if (!response.ok) throw new Error(`Cannot resolve dev branch: ${response.status}`);

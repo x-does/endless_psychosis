@@ -532,7 +532,7 @@ export class GameEngine {
   }
 
   private offerCoping(stumble = false) {
-    if (this.satire.effect || this.satire.offered || this.levelPaused || this.phase === "dead" || this.phase === "complete" || !this.coping.offer()) return;
+    if (this.satire.effect || this.satire.offered || this.levelPaused || this.phase === "dead" || this.phase === "complete" || !this.coping.offer()) return false;
     const index = this.chapterIndex < 2 ? 0 : this.chapterIndex < 4 ? 1 : 2;
     const scenario = SCENARIOS[index];
     this.offeredChoices = stumble ? { ...scenario, title: "Three stumbles. A moment to choose.", story: "The shadows press closer. Relief is within reach, but not every kind of relief helps you recover. Read what each choice gives—and what it takes." } : scenario;
@@ -540,6 +540,7 @@ export class GameEngine {
     this.sfx.coping(false);
     this.cb.onCopingOffer(this.offeredChoices);
     this.emitSnapshot();
+    return true;
   }
 
   chooseSatire(id: SatireId | null) {
@@ -947,8 +948,7 @@ export class GameEngine {
       this.sfx.atmosphere(this.coping.strain, this.coping.def?.kind === "shortcut");
     }
     if (!this.scenarioShown && this.distance >= this.target * 0.24 && this.phase === "run" && this.coping.canOffer()) {
-      this.scenarioShown = true;
-      this.offerCoping();
+      this.scenarioShown = this.offerCoping();
       if (this.paused) return;
     }
     this.rescueTimer -= dt;
