@@ -4,6 +4,8 @@
 
 A tense psychological survival runner: the road feels less trustworthy as strain rises, but the player's inputs and hazard silhouettes remain trustworthy. The protagonist is a person trying to survive, not a diagnosis or a monster. Temporary shortcuts are tempting, costly, and recoverable; skills and experience survive setbacks.
 
+Next adaptation: [The Road to Absolute Nonsense](SATIRE-ADAPTATION.md), a council-informed plan for serious-to-surreal adult satire. That expansion is planned, not implemented.
+
 ## Fleet process
 
 - Mi council: inspect existing engine and propose numerical coping/recovery rules, scenarios and acceptance criteria.
