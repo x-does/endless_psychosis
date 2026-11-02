@@ -1641,7 +1641,7 @@ function GameScreen({
             <strong>{COPING[snapshot.coping.id].icon} {COPING[snapshot.coping.id].name} · {snapshot.coping.aftermath ? "After-effect" : "Benefit"} · {effectPhaseSeconds(snapshot.coping.id, snapshot.coping.remaining, snapshot.coping.aftermath)}s</strong>
             <span>{snapshot.coping.aftermath ? COPING[snapshot.coping.id].cost : COPING[snapshot.coping.id].benefit}</span>
           </div>}
-          {snapshot?.satire?.effect && <div className="coping-status shortcut"><strong>{SATIRE_ITEMS[snapshot.satire.effect].name} · {snapshot.satire.aftermath ? "After-effect" : "Benefit"} · {Math.ceil(snapshot.satire.remaining - (snapshot.satire.aftermath ? 0 : SATIRE_ITEMS[snapshot.satire.effect].after))}s</strong><span>{snapshot.satire.aftermath ? SATIRE_ITEMS[snapshot.satire.effect].cost : SATIRE_ITEMS[snapshot.satire.effect].benefit}</span></div>}
+          {snapshot?.satire?.effect && <div className="coping-status shortcut"><strong>{SATIRE_ITEMS[snapshot.satire.effect].name} · {snapshot.satire.aftermath ? "After-effect" : "Benefit"} · {snapshot.satire.effect==='certificate'?`${snapshot.satire.charges} pulses · `:''}{Math.ceil(snapshot.satire.remaining - (snapshot.satire.aftermath ? 0 : SATIRE_ITEMS[snapshot.satire.effect].after))}s</strong><span>{snapshot.satire.aftermath ? SATIRE_ITEMS[snapshot.satire.effect].cost : SATIRE_ITEMS[snapshot.satire.effect].benefit}</span></div>}
         </div>
 
         {snapshot?.boss && (
@@ -1826,7 +1826,7 @@ function GameScreen({
           <p className="muted">{satireOffer.story}</p>
           <div className="satire-choices">{satireOffer.items.map(id => <button key={id} className={`coping-choice ${id === 'water' || id === 'subscription' ? 'healthy' : 'shortcut'}`} onClick={() => onSatireChoice(id)}>
             <strong>{SATIRE_ITEMS[id].icon} {SATIRE_ITEMS[id].name}</strong><span>{SATIRE_ITEMS[id].benefit}</span><span className="coping-cost">{SATIRE_ITEMS[id].cost}</span>
-            <AppearancePreview current={snapshot?.appearance} delta={id==='express'?[.1,0,.25]:id==='orders'?[0,.2,.1]:id==='subscription'?[.25,0,0]:[.08,0,0]} description={id==='express'?'Active: orange chevrons. Trace: more Bone and light.':id==='orders'?'Active: amber shell and comet. Trace: more Echo and Bone.':id==='subscription'?'Active: mint mandala. Trace: brighter core.':'Brief blue foot ripple; a small luminous trace.'}/>
+            <AppearancePreview current={snapshot?.appearance} delta={id==='express'?[.1,0,.25]:id==='orders'?[0,.2,.1]:id==='subscription'?[.25,0,0]:id==='revelation'?[.1,.3,0]:id==='certificate'?[.25,.15,0]:[.08,0,0]} description={id==='express'?'Active: orange chevrons. Trace: more Bone and light.':id==='orders'?'Active: amber shell and comet. Trace: more Echo and Bone.':id==='subscription'?'Active: mint mandala. Trace: brighter core.':id==='revelation'?'Geometric halo; light and ghost traces mix.':id==='certificate'?'Three-segment luminous seal; certainty is not truth.':'Brief blue foot ripple; a small luminous trace.'}/>
           </button>)}</div>
           <button className="btn ghost wide" onClick={() => onSatireChoice(null)}>Leave without buying anything</button>
           <p className="small muted">Fictional substance use and coercive wellness themes. The sales pitch is satire, not health advice. Recovery remains available.</p>

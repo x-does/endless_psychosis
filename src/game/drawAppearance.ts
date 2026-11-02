@@ -5,7 +5,7 @@ import type { SatireId } from "./satire";
 export function drawAppearance(ctx: CanvasRenderingContext2D, a: AppearanceState,
   x: number, feet: number, h: number, s: number, cycle: number, reduced: boolean,
   effect: CopingId | null, aftermath: boolean,
-  satire: { id: SatireId; aftermath: boolean; remaining: number } | null = null) {
+  satire: { id: SatireId; aftermath: boolean; remaining: number; charges?:number } | null = null) {
   const { radiance: r, echo: e, bone: b } = a;
   const top = feet - h, cy = top + h * .46;
   ctx.save();
@@ -66,7 +66,7 @@ export function drawAppearance(ctx: CanvasRenderingContext2D, a: AppearanceState
   }
   if (satire) {
     ctx.save(); ctx.lineWidth=2*s;ctx.globalAlpha=.8;
-    ctx.strokeStyle=satire.id==='express'?'#ffa36e':satire.id==='orders'?'#ffb077':satire.id==='subscription'?'#8be2c8':'#a4d9f0';
+    ctx.strokeStyle=satire.id==='express'?'#ffa36e':satire.id==='orders'?'#ffb077':satire.id==='subscription'?'#8be2c8':satire.id==='revelation'?'#c2a7ff':satire.id==='certificate'?'#f3df9b':'#a4d9f0';
     if(satire.aftermath)ctx.setLineDash([4*s,5*s]);
     ctx.beginPath();
     if(satire.aftermath)ctx.ellipse(x,cy,21*s,h*.55,0,0,Math.PI*2);
@@ -77,6 +77,9 @@ export function drawAppearance(ctx: CanvasRenderingContext2D, a: AppearanceState
     } else if(satire.id==='subscription') {
       const segments=Math.max(1,Math.ceil(satire.remaining));
       for(let i=0;i<segments;i++){const angle=i*Math.PI*2/3;ctx.moveTo(x+Math.cos(angle)*23*s,cy+Math.sin(angle)*23*s);ctx.arc(x,cy,23*s,angle,angle+1.5);}
+    } else if(satire.id==='revelation'||satire.id==='certificate'){
+      const n=satire.id==='certificate'?(satire.charges??3):6;
+      for(let i=0;i<n;i++){const angle=i*Math.PI*2/(satire.id==='certificate'?3:6);ctx.moveTo(x+Math.cos(angle)*23*s,cy+Math.sin(angle)*23*s);ctx.lineTo(x+Math.cos(angle+.6)*17*s,cy+Math.sin(angle+.6)*17*s);ctx.lineTo(x+Math.cos(angle+1.2)*23*s,cy+Math.sin(angle+1.2)*23*s);}
     } else ctx.ellipse(x,feet,22*s,5*s,0,0,Math.PI*2);
     ctx.stroke();
     if(satire.id==='orders'&&!satire.aftermath){

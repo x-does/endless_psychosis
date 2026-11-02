@@ -49,7 +49,7 @@ export interface RunSnapshot {
   mentalState: string;
   coping: { id: CopingId; remaining: number; aftermath: boolean } | null;
   appearance: { radiance: number; echo: number; bone: number; form: Form };
-  satire: { stage: number; effect: SatireId | null; remaining: number; aftermath: boolean } | null;
+  satire: { stage: number; effect: SatireId | null; remaining: number; aftermath: boolean; charges:number } | null;
 }
 
 export interface RunResult {
@@ -556,6 +556,8 @@ export class GameEngine {
       this.appearance.add(.25);
     }
     if (id === "water") { this.coping.recover(8); this.appearance.add(.08); }
+    if (id === 'revelation'){this.coping.strain=Math.min(100,this.coping.strain+10);this.appearance.add(.1,.3);}
+    if (id === 'certificate')this.appearance.add(.25,.15);
     if (id) { this.appearance.signal(SATIRE_ITEMS[id].color); this.sfx.coping(id === "express" || id === "orders"); this.cb.onToast(SATIRE_ITEMS[id].name,"info"); }
     this.setPaused(false); this.emitSnapshot();
   }
@@ -606,8 +608,8 @@ export class GameEngine {
     if (this.paused || this.phase === "dead" || this.phase === "complete") return;
     if (this.activeCooldown > 0) return;
     if (this.satire.effect === "subscription") { this.cb.onToast("A moment of silence: jump and slide remain available.","info"); return; }
-    const cost = this.satire.effect === "orders" ? 27 : this.coping.pulseCost;
-    const power = this.satire.effect === "express" && this.satire.boosting ? 2 : this.coping.damageMultiplier;
+    const cost = Math.max(this.satire.pulseCost,this.coping.pulseCost);
+    const power = Math.max(this.satire.pulsePower,this.coping.damageMultiplier);
     if (this.focus < cost) {
       this.cb.onToast("Not enough focus. Breathe.", "bad");
       return;
@@ -652,6 +654,7 @@ export class GameEngine {
       kind: "calm",
       t: 0,
     });
+    this.satire.firedPulse();
   }
 
   useActive() {
@@ -1259,7 +1262,7 @@ export class GameEngine {
     const slow = this.slowFactor;
     for (const p of this.projectiles) {
       p.t += dt;
-      const projectileSpeed = p.kind === "calm" ? 1 : slow;
+      const projectileSpeed = p.kind === "calm" ? 1 : slow * this.satire.projectileFactor;
       p.x += p.vx * projectileSpeed * dt;
       p.y += p.vy * projectileSpeed * dt;
       if (p.kind === "calm") {
@@ -1894,7 +1897,7 @@ export class GameEngine {
       mentalState: strainState(this.coping.strain),
       coping: this.coping.effect ? { id: this.coping.effect, remaining: this.coping.remaining, aftermath: this.coping.aftermath } : null,
       appearance: { radiance: this.appearance.radiance, echo: this.appearance.echo, bone: this.appearance.bone, form: this.appearance.form },
-      satire: SATIRE_ENABLED ? { stage:this.satire.stage, effect:this.satire.effect, remaining:this.satire.remaining, aftermath:this.satire.aftermath } : null,
+      satire: SATIRE_ENABLED ? { stage:this.satire.stage, effect:this.satire.effect, remaining:this.satire.remaining, aftermath:this.satire.aftermath,charges:this.satire.charges } : null,
     });
   }
 
@@ -2231,7 +2234,7 @@ export class GameEngine {
     ctx.restore();
     drawAppearance(ctx, this.appearance, x, feet, h, s, p.runCycle, this.opts.reduceMotion,
       this.coping.effect, this.coping.aftermath,
-      this.satire.effect ? { id:this.satire.effect, aftermath:this.satire.aftermath,remaining:this.satire.remaining } : this.appearance.cue?.color === '#a4d9f0' ? {id:'water',aftermath:false,remaining:this.appearance.cue.remaining} : null);
+      this.satire.effect ? { id:this.satire.effect, aftermath:this.satire.aftermath,remaining:this.satire.remaining,charges:this.satire.charges } : this.appearance.cue?.color === '#a4d9f0' ? {id:'water',aftermath:false,remaining:this.appearance.cue.remaining} : null);
 
     if (this.shieldTimer > 0) {
       ctx.save();
