@@ -1,4 +1,5 @@
 import { TECHNIQUE_BY_ID, type Technique } from "./content";
+import { SAVE_KEY as KEY } from "./environment";
 
 export interface Settings {
   sound: boolean;
@@ -26,7 +27,6 @@ export interface SaveData {
   lastPlayed: string;
 }
 
-const KEY = "endless.save.v1";
 
 export function newSave(): SaveData {
   return {

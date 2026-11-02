@@ -5,7 +5,7 @@ import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
-import { ensureSchema, getDb, pingDatabase } from "./db.js";
+import { createDatabase, ensureSchema, getDb, pingDatabase } from "./db.js";
 import { saves } from "./schema.js";
 
 const APP_VERSION = process.env.APP_VERSION ?? "0.1.0";
@@ -58,7 +58,11 @@ function asyncRoute(
   };
 }
 
-export function createApp(): express.Express {
+export function createApp(options: { staging?: boolean; dist?: string; commit?: string } = {}): express.Express {
+  const database = options.staging ? createDatabase("DEV_") : { getDb, ensureSchema, pingDatabase };
+  const { getDb: appDb, pingDatabase: appPing } = database;
+  const ready = database.ensureSchema();
+  ready.catch((error) => console.error("[endless] database preparation failed", error));
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "256kb" }));
@@ -68,6 +72,8 @@ export function createApp(): express.Express {
       status: "ok",
       app: "endless",
       version: APP_VERSION,
+      environment: options.staging ? "dev" : "production",
+      commit: options.commit ?? process.env.APP_COMMIT ?? null,
       time: new Date().toISOString(),
     });
   });
@@ -75,12 +81,13 @@ export function createApp(): express.Express {
   app.get(
     "/health/db",
     asyncRoute(async (_req, res) => {
-      if (!getDb()) {
+      if (!appDb()) {
         res.status(200).json({ status: "not_configured", database: "missing" });
         return;
       }
       try {
-        await pingDatabase();
+        await ready;
+        await appPing();
         res.json({ status: "ok", database: "connected" });
       } catch (error) {
         res.status(503).json({
@@ -99,7 +106,8 @@ export function createApp(): express.Express {
         res.status(401).json({ error: "missing_sync_code" });
         return;
       }
-      const db = getDb();
+      await ready;
+      const db = appDb();
       if (!db) {
         res.status(503).json({ error: "database_not_configured" });
         return;
@@ -135,7 +143,8 @@ export function createApp(): express.Express {
         res.status(400).json({ error: "invalid_save" });
         return;
       }
-      const db = getDb();
+      await ready;
+      const db = appDb();
       if (!db) {
         res.status(503).json({ error: "database_not_configured" });
         return;
@@ -174,7 +183,7 @@ export function createApp(): express.Express {
     res.status(404).json({ error: "not_found" });
   });
 
-  const dist = path.resolve(__dirname, "../dist");
+  const dist = options.dist ?? path.resolve(__dirname, "../dist");
   const indexPath = path.join(dist, "index.html");
   console.log(`[endless] dist path: ${dist}, index exists: ${fs.existsSync(indexPath)}`);
   if (fs.existsSync(indexPath)) {

@@ -1,0 +1,26 @@
+name: Request Hostinger deployment
+on:
+  workflow_run:
+    workflows: [Check Endless]
+    types: [completed]
+    branches: [dev, main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hostinger-deploy
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request rebuild of main with latest dev snapshot
+        env:
+          DEPLOY_HOOK: ${{ secrets.HOSTINGER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "Configure HOSTINGER_DEPLOY_HOOK or redeploy main manually in hPanel to refresh /dev." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          curl --fail --silent --show-error --request POST "$DEPLOY_HOOK"

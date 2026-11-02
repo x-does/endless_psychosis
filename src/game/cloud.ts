@@ -1,7 +1,7 @@
 import { normalizeSave, type SaveData } from "./save";
 
-const CODE_KEY = "endless.cloud.code";
-const API = "/api/save";
+import { BASE_PATH, CODE_KEY } from "./environment";
+const API = `${BASE_PATH}api/save`;
 
 export type CloudState = "idle" | "syncing" | "synced" | "offline" | "error";
 

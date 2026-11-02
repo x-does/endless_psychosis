@@ -7,3 +7,5 @@ dist-server
 private
 *.log
 *.tsbuildinfo
+dist-dev
+.staging-build

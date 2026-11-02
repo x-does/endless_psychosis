@@ -10,6 +10,8 @@ Repository: https://github.com/x-does/endless_psychosis.git
 
 Deployment target: https://psychosis.xdoes.space — see [Hostinger setup](docs/HOSTINGER.md).
 
+Release process: feature PR → `dev` → test `/dev/` → owner-approved promotion PR → `main`. See [release and staging setup](docs/RELEASES.md).
+
 ## HP Docker environment
 
 The prepared HP checkout includes an ignored local `.env` with generated database passwords.
