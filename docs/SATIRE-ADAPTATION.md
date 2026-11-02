@@ -1,6 +1,10 @@
 # The Road to Absolute Nonsense
 
-Status: council-informed design specification; **not implemented**. Extends Fracture & Recovery after PR #3, without replacing its tested mechanics. Numbers below are initial playtest targets, not claims about real substances or treatment.
+Status: **first dev slice implemented**; full catalog and ending system remain planned. Extends Fracture & Recovery in PR #3. Numbers below are initial playtest targets, not claims about real substances or treatment.
+
+### Current slice
+
+Enable locally with `VITE_SATIRE=1 npm run dev`; the Hostinger `/dev` builder supplies this flag automatically. Normal production builds leave encounters disabled. Implemented four pickups, three encounter templates, run-local behavior axes/history and checkpoint escalation, .75s speed ramps capped at 1.15×, reduced-motion steady-speed substitution, explicit effect timers and no-effect-replacement guards. Encounters begin after 45 active seconds and recur no sooner than 40s later when the effect slot and coping cooldown are clear. Use Endless to reach all three scenes. The current seed-free slice uses stable tie-breaking; seeded variety, the other six pickups, complete route endings and dedicated satirical enemy art are follow-ups.
 
 ## Direction
 

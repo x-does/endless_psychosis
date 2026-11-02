@@ -1310,6 +1310,8 @@ p {
 .coping-status { display: flex; flex-direction: column; gap: 3px; padding-top: 6px; font-size: .67rem; line-height: 1.4; color: #bdeadd; }
 .coping-status.shortcut { color: #ffd0b4; }
 .coping-status > span { color: #d1ccdc; }
+.satire-stage { color: #bbaacb; font-size: 10px; letter-spacing: .08em; padding-bottom: 4px; }
+.satire-choices { display: grid; gap: 8px; margin: 14px 0; }
 .appearance-readout { display: flex; padding-top: 5px; color: #d7d7e4; font-size: 11px; line-height: 1.4; }
 .appearance-readout strong { color: #bfe5d8; font-weight: 600; }
 .coping-overlay { z-index: 40; background: rgba(4, 4, 13, .88); padding: 12px; }

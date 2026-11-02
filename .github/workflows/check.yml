@@ -21,7 +21,7 @@ jobs:
       - run: npm test
       - run: npm run build:app
       - name: Check staging build
-        run: APP_BASE_PATH=/dev/ npm run build:app
+        run: APP_BASE_PATH=/dev/ VITE_SATIRE=1 npm run build:app
       - name: Enforce release branch
         if: github.event_name == 'pull_request' && github.base_ref == 'main'
         run: test "$HEAD_BRANCH" = dev
