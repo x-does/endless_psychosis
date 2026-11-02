@@ -518,6 +518,7 @@ export class GameEngine {
     if (id) {
       if (SATIRE_ENABLED) this.satire.coping(id);
       this.appearance.apply(id);
+      this.appearance.signal(COPING[id].color);
       const def = COPING[id];
       if (id === "ground") {
         this.focus = Math.min(this.maxFocus, this.focus + 20);
@@ -555,7 +556,7 @@ export class GameEngine {
       this.appearance.add(.25);
     }
     if (id === "water") { this.coping.recover(8); this.appearance.add(.08); }
-    if (id) { this.sfx.coping(id === "express" || id === "orders"); this.cb.onToast(SATIRE_ITEMS[id].name,"info"); }
+    if (id) { this.appearance.signal(SATIRE_ITEMS[id].color); this.sfx.coping(id === "express" || id === "orders"); this.cb.onToast(SATIRE_ITEMS[id].name,"info"); }
     this.setPaused(false); this.emitSnapshot();
   }
 
@@ -664,6 +665,7 @@ export class GameEngine {
     this.activeCooldown = this.activeMax;
     this.techniquesUsed++;
     this.appearance.add(.06);
+    this.appearance.signal(this.active?.color ?? "#a3ead5");
     this.coping.recover(10);
     this.coping.hits = [];
     this.sfx.technique();
@@ -1212,6 +1214,7 @@ export class GameEngine {
   }
 
   private collect(p: Pickup) {
+    this.appearance.signal(({spark:'#ffe08a',breath:'#8ecbff',heart:'#ff9db0',shield:'#9fe0ff'})[p.kind]);
     this.sfx.pickup();
     switch (p.kind) {
       case "spark": {
@@ -2227,7 +2230,8 @@ export class GameEngine {
 
     ctx.restore();
     drawAppearance(ctx, this.appearance, x, feet, h, s, p.runCycle, this.opts.reduceMotion,
-      this.coping.effect, this.coping.aftermath);
+      this.coping.effect, this.coping.aftermath,
+      this.satire.effect ? { id:this.satire.effect, aftermath:this.satire.aftermath,remaining:this.satire.remaining } : this.appearance.cue?.color === '#a4d9f0' ? {id:'water',aftermath:false,remaining:this.appearance.cue.remaining} : null);
 
     if (this.shieldTimer > 0) {
       ctx.save();

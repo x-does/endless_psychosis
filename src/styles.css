@@ -1314,6 +1314,10 @@ p {
 .satire-choices { display: grid; gap: 8px; margin: 14px 0; }
 .appearance-readout { display: flex; padding-top: 5px; color: #d7d7e4; font-size: 11px; line-height: 1.4; }
 .appearance-readout strong { color: #bfe5d8; font-weight: 600; }
+.appearance-preview { display:flex; align-items:center; gap:8px; border-top:1px solid #ffffff1a; padding-top:6px; font-size:11px; line-height:1.4; }
+.appearance-preview canvas { width:48px; height:48px; flex:none; background:#0b111b; border-radius:8px; }
+.appearance-preview > span { display:flex; flex-direction:column; gap:3px; }
+.appearance-preview strong { font-size:11px; font-weight:600; }
 .coping-overlay { z-index: 40; background: rgba(4, 4, 13, .88); padding: 12px; }
 .coping-card { width: min(600px, 100%); max-height: calc(100dvh - 32px); overflow-y: auto; }
 .coping-card h2 { font-size: clamp(1.25rem, 4vw, 1.8rem); }

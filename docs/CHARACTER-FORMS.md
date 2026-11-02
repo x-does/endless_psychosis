@@ -26,3 +26,9 @@ Elite inspected desktop/mobile title, gameplay and choice screenshots, then comp
 Also fixed Elite's source-review findings: benefit timers no longer include aftermath, friendly pulse projectiles no longer inherit threat slowing, coping dialogs transfer/trap/restore focus with the underlying UI inert.
 
 Elite then viewed unobscured Bone, Ghost, Light and mixed-slide screenshots and approved for dev. Its final polish requests were applied: the HUD shows only the form name (no three-axis numerical telemetry), and narrow screens hide desktop key hints even under desktop-pointer viewport emulation. Runtime checks confirmed appearance changes do not alter the collision rectangle.
+
+## Complete power-up feedback
+
+Council follow-up retained the original weights and thresholds, separating acquisition cues, active signatures and lasting residue. Every pickup/technique refreshes one steady 1.2s local outline (no stacking brightness or full-screen flash). Express adds orange chevrons with a broken aftermath ring; Orders adds an amber segmented shell and comet marker (stationary under reduced motion); Subscription shows a mint three-segment mandala during its pulse lock; Water gives a short blue foot ripple. Choice cards preview projected layers and form using the exact clamping/hysteresis function without mutating the current state.
+
+Deployment note: development source has these forms, but the older production main release does not. A production SPA response from `/dev/health` is not evidence of staging deployment. Activation still needs the owner-approved staging infrastructure promotion and Hostinger rebuild.

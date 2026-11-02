@@ -31,3 +31,14 @@ test("axes clamp independently and a new run starts clean", () => {
   assert.equal(a.form, "mixed");
   assert.equal(new AppearanceState().form, "human");
 });
+test("choice preview follows exact form rules without mutating current appearance",()=>{
+  const a=new AppearanceState();a.apply('connect');
+  const next=a.project([.4,-.15,-.15]);
+  assert.equal(a.radiance,.4);assert.equal(a.form,'mixed');
+  assert.equal(next.radiance,.8);assert.equal(next.form,'radiance');
+});
+test("acquisition cue refreshes one bounded indicator and expires in simulation time",()=>{
+  const a=new AppearanceState();a.signal('#abc');a.tick(.5);a.signal('#def');
+  assert.equal(a.cue?.remaining,1.2);assert.equal(a.cue?.color,'#def');
+  a.tick(1.2);assert.equal(a.cue,null);
+});
