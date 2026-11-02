@@ -10,6 +10,10 @@ import {
 } from "./content";
 import { haptic, Sfx } from "./audio";
 import { xpForLevel, type DerivedStats } from "./save";
+import { COPING, CopingState, SCENARIOS, strainState, type CopingId, type CopingOffer } from "./coping";
+import { AppearanceState, type Form } from "./appearance";
+import { drawAppearance } from "./drawAppearance";
+import { SATIRE_ENABLED, SATIRE_ITEMS, SatireState, type SatireOffer, type SatireId } from "./satire";
 
 export type Phase = "run" | "boss" | "complete" | "dead";
 
@@ -41,6 +45,11 @@ export interface RunSnapshot {
   enemiesDefeated: number;
   sparks: number;
   time: number;
+  strain: number;
+  mentalState: string;
+  coping: { id: CopingId; remaining: number; aftermath: boolean } | null;
+  appearance: { radiance: number; echo: number; bone: number; form: Form };
+  satire: { stage: number; effect: SatireId | null; remaining: number; aftermath: boolean } | null;
 }
 
 export interface RunResult {
@@ -67,6 +76,8 @@ export interface EngineCallbacks {
   onToast: (text: string, tone?: "good" | "bad" | "info") => void;
   onBossStart: (boss: BossSnapshot) => void;
   onPauseRequest: () => void;
+  onCopingOffer: (offer: CopingOffer) => void;
+  onSatireOffer: (offer: SatireOffer) => void;
 }
 
 export interface EngineOptions {
@@ -150,6 +161,7 @@ interface Projectile {
   r: number;
   color: string;
   damage: number;
+  bossDamage?: number;
   kind: "aimed" | "radial" | "ground" | "calm";
   t: number;
 }
@@ -163,6 +175,7 @@ interface Wave {
   life: number;
   maxLife: number;
   damage: number;
+  bossDamage?: number;
   color: string;
   hit: Set<number>;
   hitBoss: boolean;
@@ -242,6 +255,14 @@ export class GameEngine {
   private cb: EngineCallbacks;
   private opts: EngineOptions;
   private sfx: Sfx;
+  private coping = new CopingState();
+  private appearance = new AppearanceState();
+  private satire = new SatireState();
+  private nextSatire = 45;
+  private offeredChoices: CopingOffer | null = null;
+  private scenarioShown = false;
+  private atmosphereBeat = 0;
+  private rescueTimer = 0;
 
   W = 800;
   H = 600;
@@ -342,7 +363,7 @@ export class GameEngine {
         break;
       case "KeyP":
       case "Escape":
-        this.cb.onPauseRequest();
+        if (!this.coping.offered && !this.satire.offered) this.cb.onPauseRequest();
         break;
     }
   };
@@ -482,10 +503,60 @@ export class GameEngine {
     cancelAnimationFrame(this.raf);
     window.removeEventListener("keydown", this.onKeyDown);
     window.removeEventListener("keyup", this.onKeyUp);
+    this.sfx.destroy();
   }
 
   private get slowFactor() {
-    return this.slowTimer > 0 ? 0.55 : 1;
+    return this.slowTimer > 0 || (this.coping.effect === "numb" && this.coping.boosting) ? 0.55 : 1;
+  }
+
+  chooseCoping(id: CopingId | null) {
+    const offer = this.offeredChoices;
+    if (!offer || (id && id !== offer.healthy && id !== offer.shortcut)) return;
+    if (!this.coping.choose(id)) return;
+    this.offeredChoices = null;
+    if (id) {
+      if (SATIRE_ENABLED) this.satire.coping(id);
+      this.appearance.apply(id);
+      const def = COPING[id];
+      if (id === "ground") {
+        this.focus = Math.min(this.maxFocus, this.focus + 20);
+        this.projectiles = this.projectiles.filter(p => p.kind === "calm");
+      }
+      if (id === "compassion") this.hp = Math.min(this.maxHp, this.hp + 16);
+      this.sfx.coping(def.kind === "shortcut");
+      this.cb.onToast(`${def.name}: ${def.cue}`, def.kind === "healthy" ? "good" : "info");
+    }
+    this.setPaused(false);
+    this.emitSnapshot();
+  }
+
+  private offerCoping(stumble = false) {
+    if (this.satire.effect || this.satire.offered || this.levelPaused || this.phase === "dead" || this.phase === "complete" || !this.coping.offer()) return false;
+    const index = this.chapterIndex < 2 ? 0 : this.chapterIndex < 4 ? 1 : 2;
+    const scenario = SCENARIOS[index];
+    this.offeredChoices = stumble ? { ...scenario, title: "Three stumbles. A moment to choose.", story: "The shadows press closer. Relief is within reach, but not every kind of relief helps you recover. Read what each choice gives—and what it takes." } : scenario;
+    this.setPaused(true);
+    this.sfx.coping(false);
+    this.cb.onCopingOffer(this.offeredChoices);
+    this.emitSnapshot();
+    return true;
+  }
+
+  chooseSatire(id: SatireId | null) {
+    if (this.coping.effect || !this.satire.choose(id)) return;
+    if (id === "express" || id === "orders") {
+      this.coping.strain = Math.min(100,this.coping.strain+12);
+      this.appearance.add(id === "express" ? .1 : 0,id === "orders" ? .2 : 0,id === "express" ? .25 : .1);
+    }
+    if (id === "subscription") {
+      this.focus = Math.min(this.maxFocus,this.focus+20);
+      this.projectiles = this.projectiles.filter(p=>p.kind==="calm");
+      this.appearance.add(.25);
+    }
+    if (id === "water") { this.coping.recover(8); this.appearance.add(.08); }
+    if (id) { this.sfx.coping(id === "express" || id === "orders"); this.cb.onToast(SATIRE_ITEMS[id].name,"info"); }
+    this.setPaused(false); this.emitSnapshot();
   }
 
   private playerRect() {
@@ -533,7 +604,9 @@ export class GameEngine {
   pulse() {
     if (this.paused || this.phase === "dead" || this.phase === "complete") return;
     if (this.activeCooldown > 0) return;
-    const cost = 18;
+    if (this.satire.effect === "subscription") { this.cb.onToast("A moment of silence: jump and slide remain available.","info"); return; }
+    const cost = this.satire.effect === "orders" ? 27 : this.coping.pulseCost;
+    const power = this.satire.effect === "express" && this.satire.boosting ? 2 : this.coping.damageMultiplier;
     if (this.focus < cost) {
       this.cb.onToast("Not enough focus. Breathe.", "bad");
       return;
@@ -551,8 +624,9 @@ export class GameEngine {
       maxR: (132 + this.stats.pulseRadius) * this.scale,
       life: 0.38,
       maxLife: 0.38,
-      damage: 1,
-      color: this.chapter.accent,
+      damage: this.satire.effect === "orders" ? 2 : power,
+      bossDamage: this.satire.effect === "orders" ? 4 : undefined,
+      color: this.satire.effect === "orders" ? "#ffb077" : this.chapter.accent,
       hit: new Set(),
       hitBoss: false,
     });
@@ -571,8 +645,9 @@ export class GameEngine {
       vx: 780 * this.scale,
       vy: beamVy,
       r: 13 * this.scale,
-      color: this.chapter.accent,
-      damage: 0,
+      color: this.satire.effect === "orders" ? "#ffb077" : this.chapter.accent,
+      damage: this.satire.effect === "orders" ? 2 : power,
+      bossDamage: this.satire.effect === "orders" ? 4 : undefined,
       kind: "calm",
       t: 0,
     });
@@ -588,6 +663,9 @@ export class GameEngine {
     const tech = this.active;
     this.activeCooldown = this.activeMax;
     this.techniquesUsed++;
+    this.appearance.add(.06);
+    this.coping.recover(10);
+    this.coping.hits = [];
     this.sfx.technique();
     haptic(this.opts.haptics, [15, 30, 15]);
     this.applyActiveEffect(tech);
@@ -848,11 +926,44 @@ export class GameEngine {
       return;
     }
 
+    const wasAftermath = this.coping.aftermath;
+    const previousEffect = this.coping.effect;
+    this.coping.tick(dt);
+    if (SATIRE_ENABLED) this.satire.tick(dt,this.opts.reduceMotion);
+    this.appearance.tick(dt);
+    if (SATIRE_ENABLED && this.phase === "run" && this.elapsed >= this.nextSatire && !this.levelPaused && this.coping.canOffer() && !this.satire.effect) {
+      this.nextSatire = this.elapsed + 40;
+      this.setPaused(true); this.cb.onSatireOffer(this.satire.checkpoint()); this.emitSnapshot(); return;
+    }
+    if (this.coping.aftermath && !wasAftermath) {
+      this.sfx.rebound();
+      this.cb.onToast(`${this.coping.def?.name}: after-effect. ${this.coping.def?.cost}`, "info");
+    } else if (previousEffect && !this.coping.effect) {
+      this.sfx.heal();
+      this.cb.onToast("The effect passes. The next step is yours.", "good");
+    }
+    this.atmosphereBeat -= dt;
+    if (this.atmosphereBeat <= 0) {
+      this.atmosphereBeat = 2.8 - this.coping.strain / 65;
+      this.sfx.atmosphere(this.coping.strain, this.coping.def?.kind === "shortcut");
+    }
+    if (!this.scenarioShown && this.distance >= this.target * 0.24 && this.phase === "run" && this.coping.canOffer()) {
+      this.scenarioShown = this.offerCoping();
+      if (this.paused) return;
+    }
+    this.rescueTimer -= dt;
+    if (this.coping.strain >= 75 && this.rescueTimer <= 0 && this.phase === "run") {
+      this.rescueTimer = 7;
+      const baseY = this.groundY - 30 * this.scale;
+      this.pickups.push({ uid: this.uid++, kind: "breath", x: this.W + 30, y: baseY, baseY, r: 12 * this.scale, t: 0, taken: false });
+    }
+    if (this.coping.effect === "ground" && this.coping.boosting) this.projectiles = this.projectiles.filter(p => p.kind === "calm");
+
     this.runSpeed =
       (330 + this.chapter.difficulty * 16 + Math.min(this.elapsed * 1.6, 130)) *
       this.scale *
       (this.phase === "boss" ? 0.3 : 1) *
-      this.slowFactor;
+      this.slowFactor * this.satire.speed;
 
     if (this.phase === "run") {
       this.distance += (this.runSpeed * dt) / 16;
@@ -866,7 +977,7 @@ export class GameEngine {
         this.spawn();
         const diff = this.difficultyNow();
         const gap = clamp(1.3 - diff * 0.09 - this.elapsed * 0.003, 0.48, 1.3);
-        this.spawnTimer = gap * rand(0.82, 1.22);
+        this.spawnTimer = gap * rand(0.82, 1.22) * this.satire.speed;
       }
     }
 
@@ -880,9 +991,12 @@ export class GameEngine {
     this.scroll += this.runSpeed * dt;
     this.updatePlayer(dt);
     this.updateEnemies(dt);
+    if (this.paused) return;
     this.updateObstacles(dt);
+    if (this.paused) return;
     this.updatePickups(dt);
     this.updateProjectiles(dt);
+    if (this.paused) return;
     this.updateWaves(dt);
     this.updateParticles(dt);
     this.updatePopups(dt);
@@ -910,7 +1024,7 @@ export class GameEngine {
 
     this.focus = Math.min(
       this.maxFocus,
-      this.focus + this.stats.focusRegen * dt,
+      this.focus + this.stats.focusRegen * this.coping.regenFactor * (this.satire.effect === "express" && this.satire.aftermath ? .5 : 1) * dt,
     );
 
     this.hp = Math.min(this.maxHp, this.hp);
@@ -1110,17 +1224,25 @@ export class GameEngine {
         break;
       }
       case "breath":
+        this.appearance.add(.04, -.03);
+        this.coping.recover(12);
+        this.coping.hits = [];
         this.focus = Math.min(this.maxFocus, this.focus + 34);
         this.burst(p.x, p.y, "#8ecbff", 8);
         this.popup(p.x, p.y - 10, "+34 focus", "#8ecbff", 0.9, 13 * this.scale);
         break;
       case "heart":
+        this.appearance.add(.04, 0, -.03);
+        this.coping.recover(10);
+        this.coping.hits = [];
         this.hp = Math.min(this.maxHp, this.hp + 18);
         this.burst(p.x, p.y, "#ff9db0", 8);
         this.popup(p.x, p.y - 10, "+18", "#ff9db0", 0.9, 14 * this.scale);
         this.sfx.heal();
         break;
       case "shield":
+        this.appearance.add(0, 0, .03);
+        this.coping.recover(8);
         this.shieldTimer = Math.max(this.shieldTimer, 6);
         this.burst(p.x, p.y, "#9fe0ff", 10);
         this.popup(p.x, p.y - 10, "Shielded", "#9fe0ff", 0.9, 13 * this.scale);
@@ -1134,8 +1256,9 @@ export class GameEngine {
     const slow = this.slowFactor;
     for (const p of this.projectiles) {
       p.t += dt;
-      p.x += p.vx * slow * dt;
-      p.y += p.vy * slow * dt;
+      const projectileSpeed = p.kind === "calm" ? 1 : slow;
+      p.x += p.vx * projectileSpeed * dt;
+      p.y += p.vy * projectileSpeed * dt;
       if (p.kind === "calm") {
         let hit = false;
         if (this.boss && !this.boss.dead && !this.boss.entering) {
@@ -1146,7 +1269,7 @@ export class GameEngine {
             p.y + p.r >= b.y &&
             p.y - p.r <= b.y + b.h
           ) {
-            this.damageBoss(3);
+            this.damageBoss(p.bossDamage ?? 3 * p.damage);
             this.burst(p.x, p.y, p.color, 10);
             hit = true;
           }
@@ -1160,7 +1283,7 @@ export class GameEngine {
               p.y + p.r >= e.y &&
               p.y - p.r <= e.y + e.h
             ) {
-              this.damageEnemy(e, 1);
+              this.damageEnemy(e, p.damage);
               this.burst(p.x, p.y, p.color, 6);
               hit = true;
               break;
@@ -1204,7 +1327,7 @@ export class GameEngine {
           const by = this.boss.y + this.boss.h / 2;
           if (Math.hypot(bx - w.x, by - w.y) <= w.r + this.boss.w * 0.5) {
             w.hitBoss = true;
-            this.damageBoss(w.damage * 3);
+            this.damageBoss(w.bossDamage ?? w.damage * 3);
           }
         }
       }
@@ -1654,6 +1777,9 @@ export class GameEngine {
       5,
     );
     if (b.hp <= 0) {
+      this.appearance.add(.1, -.05);
+      this.coping.recover(25);
+      this.coping.hits = [];
       b.hp = 0;
       b.dead = true;
       this.burst(b.x + b.w / 2, b.y + b.h / 2, b.def.accent, 70);
@@ -1685,14 +1811,18 @@ export class GameEngine {
 
   private hurt(amount: number) {
     if (
+      this.paused ||
       this.phase === "dead" ||
       this.phase === "complete" ||
       this.invulnTimer > 0 ||
       this.shieldTimer > 0
+      || ((this.coping.effect === "connect" || this.coping.effect === "bottle") && this.coping.boosting)
     )
       return;
-    const dmg = Math.max(1, Math.round(amount * (1 - this.stats.damageReduce)));
+    const protection = this.coping.effect === "compassion" && this.coping.boosting ? 0.8 : 1;
+    const dmg = Math.max(1, Math.round(amount * (1 - this.stats.damageReduce) * protection * (this.satire.effect === "orders" ? .7 : 1)));
     this.hp -= dmg;
+    this.appearance.stumble();
     this.invulnTimer = 1.15;
     this.shake = 16;
     this.flash = 0.32;
@@ -1708,8 +1838,9 @@ export class GameEngine {
       18 * this.scale,
     );
     this.burst(this.player.x, this.player.y - 26 * this.scale, "#ff8a9a", 12);
-    this.emitSnapshot();
     if (this.hp <= 0) this.die();
+    else if (this.coping.stumble()) this.offerCoping(true);
+    this.emitSnapshot();
   }
 
   private die() {
@@ -1756,6 +1887,11 @@ export class GameEngine {
       enemiesDefeated: this.enemiesDefeated,
       sparks: this.sparksCollected,
       time: Math.round(this.elapsed),
+      strain: Math.round(this.coping.strain),
+      mentalState: strainState(this.coping.strain),
+      coping: this.coping.effect ? { id: this.coping.effect, remaining: this.coping.remaining, aftermath: this.coping.aftermath } : null,
+      appearance: { radiance: this.appearance.radiance, echo: this.appearance.echo, bone: this.appearance.bone, form: this.appearance.form },
+      satire: SATIRE_ENABLED ? { stage:this.satire.stage, effect:this.satire.effect, remaining:this.satire.remaining, aftermath:this.satire.aftermath } : null,
     });
   }
 
@@ -1850,7 +1986,7 @@ export class GameEngine {
     for (const p of this.popups) this.drawPopup(ctx, p);
     ctx.restore();
 
-    if (this.flash > 0) {
+    if (this.flash > 0 && !this.opts.reduceMotion) {
       ctx.save();
       ctx.globalAlpha = Math.min(0.5, this.flash);
       ctx.fillStyle = "#ffffff";
@@ -1862,7 +1998,7 @@ export class GameEngine {
 
   private drawBackground(ctx: CanvasRenderingContext2D) {
     const { W, H } = this;
-    const [a, b, c] = this.chapter.sky;
+    const a = "#080d16", b = "#171b2b", c = this.coping.strain > 55 ? "#493047" : "#303044";
     const g = ctx.createLinearGradient(0, 0, 0, H);
     g.addColorStop(0, a);
     g.addColorStop(0.55, b);
@@ -1870,11 +2006,33 @@ export class GameEngine {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, W, H);
 
-    for (const s of this.stars) {
+    const def = this.coping.def;
+    const strain = this.coping.strain / 100;
+    const tint = def?.color ?? (strain > 0.65 ? "#873e73" : "#415774");
+    ctx.save();
+    ctx.globalAlpha = def ? 0.15 : 0.05 + strain * 0.14;
+    ctx.fillStyle = tint;
+    ctx.fillRect(0, 0, W, this.groundY);
+    // Fractures stay in the distant sky, never across the playable lane.
+    ctx.strokeStyle = def?.color ?? "#b59abf";
+    ctx.globalAlpha = 0.08 + strain * 0.2;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 6; i++) {
+      const x = W * (i < 3 ? 0.04 + i * 0.065 : 0.82 + (i - 3) * 0.06);
+      const drift = this.opts.reduceMotion ? 0 : Math.sin(this.elapsed * 0.3 + i) * strain * 12;
+      ctx.beginPath();
+      ctx.moveTo(x + drift, 0);
+      ctx.lineTo(x - 18, H * 0.12);
+      ctx.lineTo(x + 12 + drift, H * (0.18 + strain * 0.12));
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    for (const s of this.stars.slice(0, 32)) {
       const x = ((s.x * W - this.scroll * s.sp * 0.04) % W + W) % W;
       const y = s.y * H;
       const tw = 0.5 + 0.5 * Math.sin(this.elapsed * 1.5 + s.tw);
-      ctx.globalAlpha = 0.25 + tw * 0.55;
+      ctx.globalAlpha = 0.12 + tw * 0.25;
       ctx.fillStyle = "#eaf2ff";
       ctx.beginPath();
       ctx.arc(x, y, s.s, 0, TAU);
@@ -1885,17 +2043,33 @@ export class GameEngine {
     const mx = W * 0.78;
     const my = H * 0.2;
     const glow = ctx.createRadialGradient(mx, my, 0, mx, my, 130 * this.scale);
-    glow.addColorStop(0, "rgba(255,255,255,0.55)");
-    glow.addColorStop(0.25, "rgba(200,220,255,0.18)");
+    glow.addColorStop(0, "rgba(255,255,255,0.18)");
+    glow.addColorStop(0.25, "rgba(200,220,255,0.06)");
     glow.addColorStop(1, "rgba(200,220,255,0)");
     ctx.fillStyle = glow;
     ctx.fillRect(mx - 140 * this.scale, my - 140 * this.scale, 280 * this.scale, 280 * this.scale);
     ctx.fillStyle = "#f2f6ff";
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = 0.45;
     ctx.beginPath();
     ctx.arc(mx, my, 30 * this.scale, 0, TAU);
     ctx.fill();
     ctx.globalAlpha = 1;
+
+    // An inhabited absence: silhouettes stay behind the collision corridor.
+    ctx.fillStyle = "#10131f";
+    for (let i = 0; i < 12; i++) {
+      const x = ((i * W / 8 - this.scroll * 0.035) % (W + 100) + W + 100) % (W + 100) - 50;
+      const top = H * (0.46 + (i % 4) * 0.035);
+      ctx.fillRect(x, top, 32 + (i % 3) * 16, this.groundY - top);
+    }
+    ctx.strokeStyle = "#10131b";
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 6; i++) {
+      const x = ((i * W / 4 - this.scroll * 0.09) % (W + 100) + W + 100) % (W + 100) - 50;
+      ctx.beginPath(); ctx.moveTo(x, this.groundY); ctx.lineTo(x - 5, H * .49);
+      ctx.moveTo(x - 5, H * .57); ctx.lineTo(x - 25, H * .52);
+      ctx.moveTo(x - 4, H * .61); ctx.lineTo(x + 19, H * .55); ctx.stroke();
+    }
 
     const layers = [
       { amp: 34, base: 90, speed: 0.06, color: this.chapter.ground, alpha: 0.55 },
@@ -1920,6 +2094,18 @@ export class GameEngine {
       ctx.fill();
     });
     ctx.globalAlpha = 1;
+    const wx = W * .78, wy = H * .57;
+    const windowGlow = ctx.createRadialGradient(wx, wy, 1, wx, wy, 45 * this.scale);
+    windowGlow.addColorStop(0, "#e6ad6244"); windowGlow.addColorStop(1, "#e6ad6200");
+    ctx.fillStyle = windowGlow; ctx.fillRect(wx - 50, wy - 50, 100, 100);
+    ctx.fillStyle = "#d7a76b"; ctx.fillRect(wx, wy, 5 * this.scale, 9 * this.scale);
+    if (SATIRE_ENABLED && this.satire.stage > 0) {
+      ctx.save(); ctx.fillStyle = "#171621"; ctx.strokeStyle = "#a890a0";
+      ctx.fillRect(W * .43, H * .39, W * .48, 28 * this.scale);
+      ctx.font = `${Math.max(9,11*this.scale)}px monospace`; ctx.fillStyle = "#d7c3b3";
+      ctx.fillText(this.satire.stage === 2 ? "REVELATIONS: TAKE A NUMBER" : "INNER PEACE: PAYMENT OVERDUE", W*.45,H*.39+18*this.scale);
+      ctx.restore();
+    }
   }
 
   private drawGround(ctx: CanvasRenderingContext2D) {
@@ -1959,7 +2145,7 @@ export class GameEngine {
     const feet = p.y;
     const bodyTop = feet - h;
     const blink = this.invulnTimer > 0 && Math.floor(this.invulnTimer * 14) % 2 === 0;
-    const accent = this.chapter.accent;
+    const accent = this.coping.def?.color ?? (this.coping.strain >= 65 ? "#efadc8" : this.chapter.accent);
 
     ctx.save();
     ctx.globalAlpha = 0.28;
@@ -1970,12 +2156,16 @@ export class GameEngine {
     ctx.restore();
 
     const glow = ctx.createRadialGradient(x, bodyTop + h / 2, 0, x, bodyTop + h / 2, 70 * s);
-    glow.addColorStop(0, "rgba(180,240,255,0.28)");
+    glow.addColorStop(0, "rgba(180,240,255,0.16)");
     glow.addColorStop(1, "rgba(180,240,255,0)");
     ctx.fillStyle = glow;
     ctx.fillRect(x - 80 * s, bodyTop - 30 * s, 160 * s, h + 70 * s);
 
     if (blink) ctx.globalAlpha = 0.4;
+
+    const presence = Math.max(this.appearance.radiance, this.appearance.echo, this.appearance.bone);
+    ctx.save();
+    ctx.globalAlpha *= 1 - Math.min(.65, presence * .72);
 
     ctx.save();
     ctx.strokeStyle = accent;
@@ -2004,7 +2194,7 @@ export class GameEngine {
     bodyGrad.addColorStop(0.45, accent);
     bodyGrad.addColorStop(1, "#16324a");
     ctx.fillStyle = bodyGrad;
-    roundRect(ctx, x - 13 * s, bodyTop + 8 * s, 26 * s, h - 12 * s, 12 * s);
+    roundRect(ctx, x - 15 * s, bodyTop + 8 * s, 29 * s, h - 12 * s, 8 * s);
     ctx.fill();
 
     ctx.fillStyle = "#f4ffff";
@@ -2034,6 +2224,10 @@ export class GameEngine {
     );
     ctx.stroke();
     ctx.restore();
+
+    ctx.restore();
+    drawAppearance(ctx, this.appearance, x, feet, h, s, p.runCycle, this.opts.reduceMotion,
+      this.coping.effect, this.coping.aftermath);
 
     if (this.shieldTimer > 0) {
       ctx.save();
@@ -2416,7 +2610,7 @@ export class GameEngine {
 
   private drawPickup(ctx: CanvasRenderingContext2D, p: Pickup) {
     const s = this.scale;
-    const pulse = 1 + Math.sin(p.t * 4) * 0.08;
+    const pulse = this.opts.reduceMotion ? 1 : 1 + Math.sin(p.t * 4) * 0.08;
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.scale(pulse, pulse);

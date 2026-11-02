@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SAVE_KEY } from "./game/environment";
+import { COPING, SCENARIOS, effectPhaseSeconds, type CopingId, type CopingOffer } from "./game/coping";
+import { SATIRE_ITEMS, type SatireId, type SatireOffer } from "./game/satire";
 import {
   CHAPTERS,
   CONTENT_NOTE,
@@ -183,6 +185,8 @@ export default function App() {
   const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
 
   const engineRef = useRef<GameEngine | null>(null);
+  const [copingOffer, setCopingOffer] = useState<CopingOffer | null>(null);
+  const [satireOffer, setSatireOffer] = useState<SatireOffer | null>(null);
   const restartRef = useRef(false);
 
   const chapter = run ? CHAPTERS[run.chapterIndex] ?? CHAPTERS[0] : CHAPTERS[0];
@@ -271,6 +275,8 @@ export default function App() {
       },
       {
         onSnapshot: (snap) => setSnapshot(snap),
+        onCopingOffer: (offer) => setCopingOffer(offer),
+        onSatireOffer: (offer) => setSatireOffer(offer),
         onLevelUp: (choices, level) => setLevelUp({ choices, level }),
         onComplete: (result) => {
           setSave((prev) => {
@@ -345,6 +351,8 @@ export default function App() {
   }, [screen, run, canvasEl, gameKey, showToast]);
 
   const startChapter = (chapterIndex: number, mode: "chapter" | "endless" = "chapter") => {
+    setCopingOffer(null);
+    setSatireOffer(null);
     setRun({ chapterIndex, mode });
     setIntroOpen(true);
     setSnapshot(null);
@@ -369,7 +377,7 @@ export default function App() {
   };
 
   const openPause = () => {
-    if (introOpen || levelUp || complete || dead) return;
+    if (introOpen || levelUp || complete || dead || copingOffer || satireOffer) return;
     setPaused(true);
     engineRef.current?.setPaused(true);
   };
@@ -500,6 +508,13 @@ export default function App() {
       <GameScreen
         canvasRef={setCanvasEl}
         snapshot={snapshot}
+        copingOffer={copingOffer}
+        satireOffer={satireOffer}
+        onSatireChoice={(id) => { engineRef.current?.chooseSatire(id); setSatireOffer(null); }}
+        onCopingChoice={(id) => {
+          engineRef.current?.chooseCoping(id);
+          setCopingOffer(null);
+        }}
         run={run}
         chapter={chapter}
         save={save}
@@ -688,13 +703,14 @@ function TitleScreen({
         <span className="orb orb-b" />
         <span className="orb orb-c" />
       </div>
+      <div className="title-landscape" aria-hidden="true"><span className="answering-window" /><span className="title-road" /></div>
       <div className="title-content">
-        <div className="eyebrow">A gentle endless runner</div>
+        <div className="eyebrow">A psychological survival runner</div>
         <h1 className="game-title">ENDLESS</h1>
         <div className="game-subtitle">The Long Way Home</div>
         <p className="title-copy">
-          Outrun the fog. Settle the spiral. Learn a new way to carry your mind
-          — one chapter, one breath at a time.
+          The road is real. The shadows know your name. Hold on to yourself,
+          survive the shortcuts, and return stronger than the night that follows you.
         </p>
 
         {save.runs > 0 && (
@@ -1419,6 +1435,10 @@ function Toggle({
 // ------------------------------------------------------------------ game
 
 function GameScreen({
+  satireOffer,
+  onSatireChoice,
+  copingOffer,
+  onCopingChoice,
   canvasRef,
   snapshot,
   run,
@@ -1451,6 +1471,10 @@ function GameScreen({
 }: {
   canvasRef: (el: HTMLCanvasElement | null) => void;
   snapshot: RunSnapshot | null;
+  copingOffer: CopingOffer | null;
+  satireOffer: SatireOffer | null;
+  onSatireChoice: (id: SatireId | null) => void;
+  onCopingChoice: (id: CopingId | null) => void;
   run: RunConfig;
   chapter: Chapter;
   save: SaveData;
@@ -1487,9 +1511,33 @@ function GameScreen({
     : 0;
   const cooldownLeft = snapshot ? Math.ceil(snapshot.activeCooldown) : 0;
   const activeReady = snapshot ? snapshot.activeCooldown <= 0 : false;
+  const copingDialogRef = useRef<HTMLElement | null>(null);
+  const gameScreenRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!copingOffer && !satireOffer) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const dialog = copingDialogRef.current;
+    const siblings = [...(gameScreenRef.current?.children ?? [])].filter(el => !el.classList.contains("coping-overlay")) as HTMLElement[];
+    siblings.forEach(el => { el.inert = true; });
+    dialog?.focus();
+    const trap = (event: KeyboardEvent) => {
+      if (event.key !== "Tab" || !dialog) return;
+      const buttons = [...dialog.querySelectorAll<HTMLButtonElement>("button")];
+      const first = buttons[0], last = buttons.at(-1);
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    };
+    dialog?.addEventListener("keydown", trap);
+    return () => {
+      siblings.forEach(el => { el.inert = false; });
+      dialog?.removeEventListener("keydown", trap);
+      if (previous?.isConnected && previous !== document.body) previous.focus();
+      else gameScreenRef.current?.querySelector<HTMLButtonElement>(".hud-btn")?.focus();
+    };
+  }, [copingOffer, satireOffer]);
 
   return (
-    <div className="game-screen">
+    <div ref={gameScreenRef} className={`game-screen state-${(snapshot?.mentalState ?? "Anchored").toLowerCase().replace(" ", "-")}`}>
       <canvas ref={canvasRef} className="game-canvas" />
 
       <div className="hud">
@@ -1562,6 +1610,20 @@ function GameScreen({
           </div>
         </div>
 
+        <div className="strain-panel">
+          {snapshot?.satire && <div className="satire-stage">DEV SLICE · {['Credible','Contradictory','Absurd'][snapshot.satire.stage]}</div>}
+          <div className="strain-heading"><span>STRAIN · {snapshot?.mentalState ?? "Anchored"}</span><strong>{snapshot?.strain ?? 18}/100</strong></div>
+          <div className="strain-track" role="meter" aria-label="Strain" aria-valuemin={0} aria-valuemax={100} aria-valuenow={snapshot?.strain ?? 18}><span style={{ width: `${snapshot?.strain ?? 18}%` }} /></div>
+          {snapshot?.appearance && <div className="appearance-readout" aria-label="Appearance blend">
+            <strong>{snapshot.appearance.form === "human" ? "Human" : snapshot.appearance.form === "mixed" ? "Mixed form" : snapshot.appearance.form === "radiance" ? "Light mote" : snapshot.appearance.form === "echo" ? "Ghost echo" : "Skeletal echo"}</strong>
+          </div>}
+          {snapshot?.coping && <div className={`coping-status ${COPING[snapshot.coping.id].kind}`}>
+            <strong>{COPING[snapshot.coping.id].icon} {COPING[snapshot.coping.id].name} · {snapshot.coping.aftermath ? "After-effect" : "Benefit"} · {effectPhaseSeconds(snapshot.coping.id, snapshot.coping.remaining, snapshot.coping.aftermath)}s</strong>
+            <span>{snapshot.coping.aftermath ? COPING[snapshot.coping.id].cost : COPING[snapshot.coping.id].benefit}</span>
+          </div>}
+          {snapshot?.satire?.effect && <div className="coping-status shortcut"><strong>{SATIRE_ITEMS[snapshot.satire.effect].name} · {snapshot.satire.aftermath ? "After-effect" : "Benefit"} · {Math.ceil(snapshot.satire.remaining - (snapshot.satire.aftermath ? 0 : SATIRE_ITEMS[snapshot.satire.effect].after))}s</strong><span>{snapshot.satire.aftermath ? SATIRE_ITEMS[snapshot.satire.effect].cost : SATIRE_ITEMS[snapshot.satire.effect].benefit}</span></div>}
+        </div>
+
         {snapshot?.boss && (
           <div className="boss-bar">
             <div className="boss-name">
@@ -1596,7 +1658,7 @@ function GameScreen({
         </div>
       )}
 
-      {!introOpen && !paused && !levelUp && !complete && !dead && (
+      {!introOpen && !paused && !levelUp && !complete && !dead && !copingOffer && !satireOffer && (
         <div className="controls">
           <button
             className="ctrl ctrl-slide"
@@ -1678,6 +1740,7 @@ function GameScreen({
               <div>TAP <span className="ctrl-key">◉</span> pulse</div>
               <div>TAP technique</div>
             </div>
+            <p className="intro-note">Strain rises when you stumble. Three hits in 12 seconds open a coping choice. Healthy responses cost no focus. Shortcuts offer power now and a stated cost afterward. You can always continue without choosing either.</p>
             <p className="intro-note">{CONTENT_NOTE}</p>
             <button className="btn primary big wide" onClick={onBegin}>
               Begin
@@ -1694,6 +1757,10 @@ function GameScreen({
             <p className="muted">
               Progress is saved when you leave. You can always come back.
             </p>
+            <details className="coping-guide"><summary>Coping field guide · benefits & costs</summary>
+              <p>Appearance remembers recent experiences: Radiance, Echo and Bone mix independently and fade as you move. Forms are symbolic, not judgments. The outlined footprint always shows your unchanged collision space—even as a light mote.</p>
+              {Object.values(COPING).map(def => <p key={def.id}><strong>{def.icon} {def.name}</strong><br />{def.benefit}<br /><span className="muted">{def.cost}</span></p>)}
+            </details>
             <div className="pause-actions">
               <button className="btn primary" onClick={onResume}>
                 Resume
@@ -1711,6 +1778,38 @@ function GameScreen({
           </div>
         </div>
       )}
+
+      {copingOffer && <div className="overlay coping-overlay">
+        <section ref={copingDialogRef} tabIndex={-1} className="modal-card coping-card" role="dialog" aria-modal="true" aria-labelledby="coping-title" aria-describedby="coping-story">
+          <div className="eyebrow">The road is paused · your choice</div>
+          <h2 id="coping-title">{copingOffer.title}</h2>
+          <p id="coping-story" className="muted">{copingOffer.story}</p>
+          <div className="coping-choices">
+            {[copingOffer.healthy, copingOffer.shortcut].map(id => {
+              const def = COPING[id];
+              return <button key={id} className={`coping-choice ${def.kind}`} onClick={() => onCopingChoice(id)}>
+                <span className="eyebrow">{def.kind === "healthy" ? "Recover · no focus required" : "Costly shortcut · temporary relief"}</span>
+                <strong>{def.icon} {def.name}</strong><span>{def.benefit}</span><span className="coping-cost">{def.cost}</span>
+              </button>;
+            })}
+          </div>
+          <button className="btn ghost wide" onClick={() => onCopingChoice(null)}>Continue without either · no added penalty</button>
+          <p className="small muted">These are fictional gameplay effects, not diagnoses. A setback does not erase your progress.</p>
+        </section>
+      </div>}
+
+      {satireOffer && <div className="overlay coping-overlay">
+        <section ref={copingDialogRef} tabIndex={-1} className="modal-card coping-card" role="dialog" aria-modal="true" aria-labelledby="satire-title">
+          <div className="eyebrow">The road is paused · adult satire · dev slice</div>
+          <h2 id="satire-title">{satireOffer.title}</h2>
+          <p className="muted">{satireOffer.story}</p>
+          <div className="satire-choices">{satireOffer.items.map(id => <button key={id} className={`coping-choice ${id === 'water' || id === 'subscription' ? 'healthy' : 'shortcut'}`} onClick={() => onSatireChoice(id)}>
+            <strong>{SATIRE_ITEMS[id].icon} {SATIRE_ITEMS[id].name}</strong><span>{SATIRE_ITEMS[id].benefit}</span><span className="coping-cost">{SATIRE_ITEMS[id].cost}</span>
+          </button>)}</div>
+          <button className="btn ghost wide" onClick={() => onSatireChoice(null)}>Leave without buying anything</button>
+          <p className="small muted">Fictional substance use and coercive wellness themes. The sales pitch is satire, not health advice. Recovery remains available.</p>
+        </section>
+      </div>}
 
       {levelUp && (
         <div className="overlay level-overlay">
