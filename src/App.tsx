@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SAVE_KEY } from "./game/environment";
 import {
   CHAPTERS,
   CONTENT_NOTE,
@@ -38,7 +39,6 @@ type Toast = { id: number; text: string; tone: "good" | "bad" | "info" };
 type LevelUpState = { choices: Technique[]; level: number };
 type CompleteState = { result: RunResult; keystone: Technique; chapter: Chapter };
 
-const SAVE_KEY = "endless.save.v1";
 
 function applyRunToSave(
   prev: SaveData,

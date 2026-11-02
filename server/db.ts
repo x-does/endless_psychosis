@@ -4,15 +4,16 @@ import * as schema from "./schema.js";
 
 export type Database = MySql2Database<typeof schema>;
 
+export function createDatabase(prefix = "") {
 let pool: mysql.Pool | null = null;
 let database: Database | null = null;
 
 function env(name: string): string | undefined {
-  const value = process.env[name];
+  const value = process.env[prefix + name];
   return value && value.trim() ? value.trim() : undefined;
 }
 
-export function dbConfigured(): boolean {
+function dbConfigured(): boolean {
   return Boolean(
     env("DB_HOST") &&
       env("DB_NAME") &&
@@ -21,7 +22,7 @@ export function dbConfigured(): boolean {
   );
 }
 
-export function getDb(): Database | null {
+function getDb(): Database | null {
   if (database) return database;
   if (!dbConfigured()) return null;
   pool = mysql.createPool({
@@ -37,7 +38,7 @@ export function getDb(): Database | null {
   return database;
 }
 
-export async function ensureSchema(): Promise<void> {
+async function ensureSchema(): Promise<void> {
   const db = getDb();
   if (!db) return;
   await db.execute(`
@@ -52,9 +53,13 @@ export async function ensureSchema(): Promise<void> {
   `);
 }
 
-export async function pingDatabase(): Promise<boolean> {
+async function pingDatabase(): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
   await db.execute("SELECT 1");
   return true;
 }
+return { getDb, ensureSchema, pingDatabase };
+}
+
+export const { getDb, ensureSchema, pingDatabase } = createDatabase();
