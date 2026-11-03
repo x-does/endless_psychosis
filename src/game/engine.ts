@@ -617,6 +617,7 @@ export class GameEngine {
   jump() {
     if (this.paused || this.phase === "dead" || this.phase === "complete") return;
     if (this.player.onGround || this.player.coyote > 0) {
+      this.slideEnd();
       this.player.vy = -930 * this.scale;
       this.player.onGround = false;
       this.player.coyote = 0;
@@ -648,6 +649,7 @@ export class GameEngine {
     this.player.sliding = false;
     this.player.slideTimer = 0;
   }
+  swipeCrouch(){if(!this.player.onGround)return;this.slideStart();if(this.player.sliding){this.slideHeld=false;this.player.slideTimer=1;}}
 
   catchBonus(id: number) {
     if (this.paused || this.phase !== "run") return;

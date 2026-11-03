@@ -1714,6 +1714,10 @@ p {
 .hold-caption {font-size:9px;line-height:1.1;max-width:60px;}
 .hold-armed {outline:3px solid #f3df9b;outline-offset:3px;background:#453d28;}
 .discovery-overlay {z-index:45;}
+.swipe-surface {position:absolute;left:30%;right:0;z-index:12;touch-action:none;user-select:none;-webkit-user-select:none;}
+.swipe-hint {position:absolute;right:20px;bottom:12px;color:#c9e6dfb0;font-size:12px;pointer-events:none;border-right:2px solid #9ad3c377;padding:8px;}
+.swipe-mode .combat-controls {flex-direction:row;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));gap:12px;}
+.swipe-mode .combat-controls .ctrl {width:72px;height:64px;}
 /* ------------------------------------------------------------------ overlays */
 .bonus-bat { position:absolute; z-index:15; transform:translateX(-50%); width:72px; min-height:76px; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:3px; border:1px solid #f7d579; border-radius:50%; background:#201b2ce8; color:#ffe39c; box-shadow:0 0 0 5px #ffda7718; touch-action:manipulation; cursor:pointer; }
 .bonus-bat span { font-size:9px; letter-spacing:.12em; }

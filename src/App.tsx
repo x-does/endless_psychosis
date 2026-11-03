@@ -5,6 +5,7 @@ import { SATIRE_ITEMS, type SatireId, type SatireOffer } from "./game/satire";
 import { AppearanceState, APPEARANCE_MIX } from "./game/appearance";
 import { drawAppearance } from "./game/drawAppearance";
 import {MOVE_INFO,type Move} from './game/movement';
+import {SwipeGesture} from './game/swipe';
 
 function AppearancePreview({ current, delta, description }: {
   current: RunSnapshot["appearance"] | undefined;
@@ -595,6 +596,7 @@ export default function App() {
         }}
         onJump={() => engineRef.current?.jump()}
         onSlideStart={() => engineRef.current?.slideStart()}
+        onSwipeCrouch={()=>engineRef.current?.swipeCrouch()}
         onSlideEnd={() => engineRef.current?.slideEnd()}
         onPulse={() => engineRef.current?.pulse()}
         onBonus={(id) => engineRef.current?.catchBonus(id)}
@@ -1379,6 +1381,7 @@ function SettingsScreen({
           checked={save.settings.reduceMotion}
           onChange={(v) => onUpdate({ reduceMotion: v })}
         />
+        <Toggle label="Movement buttons" hint="Off: right-side swipes on phones. On: movement pads. Desktop buttons always remain available." checked={save.settings.movement==='buttons'} onChange={v=>onUpdate({movement:v?'buttons':'swipe'})}/>
       </div>
 
       <div className="settings-group">
@@ -1498,6 +1501,7 @@ function GameScreen({
   onDeadMap,
   onJump,
   onSlideStart,
+  onSwipeCrouch,
   onSlideEnd,
   onPulse,
   onBonus,
@@ -1537,6 +1541,7 @@ function GameScreen({
   onDeadMap: () => void;
   onJump: () => void;
   onSlideStart: () => void;
+  onSwipeCrouch:()=>void;
   onSlideEnd: () => void;
   onPulse: () => void;
   onBonus: (id: number) => void;
@@ -1553,20 +1558,27 @@ function GameScreen({
   const activeReady = snapshot ? snapshot.activeCooldown <= 0 : false;
   const copingDialogRef = useRef<HTMLElement | null>(null);
   const gameScreenRef = useRef<HTMLDivElement | null>(null);
+  const [phoneInput,setPhoneInput]=useState(false);
+  useEffect(()=>{const media=matchMedia('(pointer: coarse)');const update=()=>setPhoneInput(media.matches);update();media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
+  const swipeMode=phoneInput&&save.settings.movement!=='buttons';
+  const gesture=useRef(new SwipeGesture());
+  const [swipeHint,setSwipeHint]=useState('Swipe ↑ to jump');
+  const [swipeBounds,setSwipeBounds]=useState({top:220,bottom:110});
+  useEffect(()=>{gesture.current.cancel();},[swipeMode,swipeBounds.top,swipeBounds.bottom]);
   const [bonusTop,setBonusTop] = useState<number|null>(null);
   const slideEndRef=useRef(onSlideEnd);slideEndRef.current=onSlideEnd;
   const blocked = introOpen || paused || !!levelUp || !!complete || !!dead || !!copingOffer || !!satireOffer || !!discovery;
   const skillCancelRef=useRef(onSkillCancel);skillCancelRef.current=onSkillCancel;
   useEffect(()=>{
-    const stop=()=>{slideEndRef.current();skillCancelRef.current();};window.addEventListener('blur',stop);
+    const stop=()=>{slideEndRef.current();skillCancelRef.current();gesture.current.cancel();};window.addEventListener('blur',stop);
     if(blocked)stop();
     return()=>{window.removeEventListener('blur',stop);stop();};
   },[blocked]);
   useEffect(()=>{
     const root=gameScreenRef.current;if(!root)return;
-    const measure=()=>{const hud=root.querySelector('.hud')?.getBoundingClientRect();const bounds=root.getBoundingClientRect();const top=(hud?.bottom??bounds.top)-bounds.top+24;setBonusTop(top+64<bounds.height*.64?top:null);};
+    const measure=()=>{const hud=root.querySelector('.hud')?.getBoundingClientRect();const bounds=root.getBoundingClientRect();const top=(hud?.bottom??bounds.top)-bounds.top+24;setBonusTop(top+64<bounds.height*.64?top:null);const combat=root.querySelector('.combat-controls')?.getBoundingClientRect();setSwipeBounds({top:top-12,bottom:combat?bounds.bottom-combat.top+16:120});};
     const observer=new ResizeObserver(measure);observer.observe(root);const hud=root.querySelector('.hud');if(hud)observer.observe(hud);measure();return()=>observer.disconnect();
-  },[]);
+  },[swipeMode,blocked]);
   useEffect(() => {
     if (!copingOffer && !satireOffer && !discovery) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -1591,8 +1603,19 @@ function GameScreen({
   }, [copingOffer, satireOffer,discovery]);
 
   return (
-    <div ref={gameScreenRef} className={`game-screen state-${(snapshot?.mentalState ?? "Anchored").toLowerCase().replace(" ", "-")}`}>
+    <div ref={gameScreenRef} className={`game-screen ${swipeMode?'swipe-mode':''} state-${(snapshot?.mentalState ?? "Anchored").toLowerCase().replace(" ", "-")}`}>
       <canvas ref={canvasRef} className="game-canvas" />
+      {swipeMode&&!blocked&&<div className="swipe-surface" style={{top:swipeBounds.top,bottom:swipeBounds.bottom}} aria-label="Swipe movement area" onPointerDown={e=>{
+        if(e.pointerType==='mouse'||(e.target as HTMLElement).closest('button,a,input,[role="dialog"]'))return;
+        if(gesture.current.begin(e.pointerId,e.clientX,e.clientY,performance.now()))e.currentTarget.setPointerCapture(e.pointerId);
+      }} onPointerUp={e=>{
+        const action=gesture.current.release(e.pointerId,e.clientX,e.clientY,performance.now());if(!action)return;
+        if(!snapshot?.moves.includes(action)){setSwipeHint('Not discovered yet');return;}
+        setSwipeHint(({jump:'↑ Jump',crouch:'↓ Crouch · 1s',back:'← Back dash',forward:'→ Forward dash'})[action]);
+        if(action==='jump')onJump();else if(action==='crouch')onSwipeCrouch();else onDash(action==='back'?-1:1);
+      }} onPointerCancel={e=>gesture.current.cancel(e.pointerId)} onLostPointerCapture={e=>gesture.current.cancel(e.pointerId)}>
+        <span className="swipe-hint">{swipeHint}</span>
+      </div>}
       {!blocked && snapshot?.bonus && bonusTop!==null && <button className="bonus-bat" style={{top:bonusTop,left:`${snapshot.bonus.id%2?62:25}%`}} aria-label={`Catch golden bat: ${snapshot.bonus.reward==='xp'?'+25 XP':'healing bonus'}`} onClick={(event)=>{event.stopPropagation();onBonus(snapshot.bonus!.id);}}>
         <svg width="44" height="26" viewBox="0 0 64 38" aria-hidden="true"><path d="M32 18 25 9 23 2 17 12 2 5 8 25 18 20 24 32 32 26 40 32 46 20 56 25 62 5 47 12 41 2 39 9Z" fill="currentColor"/><circle cx="28" cy="18" r="2" fill="#21172b"/><circle cx="36" cy="18" r="2" fill="#21172b"/></svg>
         <span>BONUS</span><strong>{snapshot.bonus.reward==='xp'?'+25 XP':'+16 HP'}</strong>
@@ -1717,7 +1740,7 @@ function GameScreen({
       )}
 
       {!blocked && <>
-        <div className="controls movement-controls" aria-label="Movement">
+        {!swipeMode&&<div className="controls movement-controls" aria-label="Movement">
           {snapshot?.moves.includes('back')&&<button className="ctrl ctrl-back" aria-label="Dash backward" aria-disabled={(snapshot.dashCooldown??0)>0} onClick={()=>onDash(-1)}>←<span>Back</span><small>{snapshot.dashCooldown>0?`${snapshot.dashCooldown.toFixed(1)}s`:'A / ←'}</small></button>}
           {snapshot?.moves.includes('forward')&&<button className="ctrl ctrl-forward" aria-label="Dash forward" aria-disabled={(snapshot.dashCooldown??0)>0} onClick={()=>onDash(1)}>→<span>Forward</span><small>{snapshot.dashCooldown>0?`${snapshot.dashCooldown.toFixed(1)}s`:'D / →'}</small></button>}
           {snapshot?.moves.includes('crouch')&&<button
@@ -1742,7 +1765,7 @@ function GameScreen({
           <button className="ctrl ctrl-jump" aria-label="Jump" onClick={(e)=>{if(e.detail===0)onJump();}} onPointerDown={(e) => { e.preventDefault(); onJump(); }}>
             <span className="ctrl-key">↑</span><span className="ctrl-label">Jump</span>
           </button>
-        </div>
+        </div>}
         <div className="combat-controls" aria-label="Combat and skills">
           {snapshot?.activeName&&<button className={`ctrl ctrl-tech ${snapshot.holdArmed?'hold-armed':''}`} aria-label={`${snapshot.activeName}${snapshot.moves.includes('hold')?`; hold: ${snapshot.holdLabel}`:''}`} aria-disabled={!activeReady} onPointerDown={(e)=>{e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);onSkillStart();}} onPointerUp={(e)=>{e.preventDefault();onSkillRelease();}} onPointerCancel={onSkillCancel} onLostPointerCapture={onSkillCancel} onBlur={onSkillCancel} onKeyDown={(e)=>{if(['Space','Enter'].includes(e.code)){e.preventDefault();if(!e.repeat)onSkillStart();}}} onKeyUp={(e)=>{if(['Space','Enter'].includes(e.code)){e.preventDefault();onSkillRelease();}}}>
             <span className="ctrl-key" style={{ color: snapshot?.activeName ? chapter.accent : undefined }}>
@@ -1759,7 +1782,7 @@ function GameScreen({
         </div>
       </>}
 
-      {discovery&&<div className="overlay discovery-overlay"><section ref={copingDialogRef} tabIndex={-1} className="modal-card narrow" role="dialog" aria-modal="true" aria-labelledby="discovery-title"><div className="eyebrow">A new movement · road paused</div><h2 id="discovery-title">{MOVE_INFO[discovery].title}</h2><p>{MOVE_INFO[discovery].text}</p><p className="muted small">Saved permanently when you continue. The road gives you two seconds of recovery space.</p><button className="btn primary wide" onClick={onDiscover}>Learn it & continue</button></section></div>}
+      {discovery&&<div className="overlay discovery-overlay"><section ref={copingDialogRef} tabIndex={-1} className="modal-card narrow" role="dialog" aria-modal="true" aria-labelledby="discovery-title"><div className="eyebrow">A new movement · road paused</div><h2 id="discovery-title">{MOVE_INFO[discovery].title}</h2><p>{swipeMode&&discovery!=='hold'?({jump:'Swipe up on the right side to jump.',crouch:'Swipe down on the right side to crouch for one second. Swipe up to stand and jump.',back:'Swipe left on the right side to dash backward.',forward:'Swipe right on the right side to dash forward. Both dashes share a cooldown.'})[discovery]:MOVE_INFO[discovery].text}</p><p className="muted small">Saved permanently when you continue. The road gives you two seconds of recovery space.</p><button className="btn primary wide" onClick={onDiscover}>Learn it & continue</button></section></div>}
 
       {introOpen && (
         <div className="overlay intro-overlay">
@@ -1805,7 +1828,7 @@ function GameScreen({
               <div>TAP <span className="ctrl-key">◉</span> pulse</div>
               <div>TAP technique</div>
             </div>
-            <p className="intro-note">Start with Jump. Discover crouching and positional dashes one at a time on the road. Movement lives below your left thumb; combat has its own column on the right. Tap a golden BONUS bat for XP or healing.</p>
+            <p className="intro-note">{swipeMode?'One hand: swipe up on the right side to jump. Discover down/left/right movements as you travel. Pulse and Skill are separate taps at bottom-right. Settings → Movement buttons restores pads.':'Start with Jump. Discover crouching and positional dashes one at a time on the road. Movement lives below your left thumb; combat has its own column on the right.'} Tap a golden BONUS bat for XP or healing.</p>
             <p className="intro-note">Strain rises when you stumble. Three hits in 12 seconds open a coping choice. Healthy responses cost no focus. Shortcuts offer power now and a stated cost afterward. You can always continue without choosing either.</p>
             <p className="intro-note">{CONTENT_NOTE}</p>
             <button className="btn primary big wide" onClick={onBegin}>

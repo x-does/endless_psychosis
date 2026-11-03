@@ -3,6 +3,7 @@ import { SAVE_KEY as KEY } from "./environment";
 import {normalizeMoves,type Move} from './movement';
 
 export interface Settings {
+  movement?: 'swipe'|'buttons';
   sound: boolean;
   haptics: boolean;
   reduceMotion: boolean;
