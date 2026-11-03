@@ -1,0 +1,29 @@
+name: Check Endless
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+permissions:
+  contents: read
+jobs:
+  check:
+    name: Build and typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build:app
+      - name: Check staging build
+        run: APP_BASE_PATH=/dev/ VITE_SATIRE=1 npm run build:app
+      - name: Enforce release branch
+        if: github.event_name == 'pull_request' && github.base_ref == 'main'
+        run: test "$HEAD_BRANCH" = dev
+        env:
+          HEAD_BRANCH: ${{ github.head_ref }}

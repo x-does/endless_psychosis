@@ -5,6 +5,9 @@ dist-server/
 .env
 .env.*
 !.env.example
+!.env.staging.example
 .DS_Store
 *.log
 private/
+dist-dev/
+.staging-build/
