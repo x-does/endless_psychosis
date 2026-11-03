@@ -10,7 +10,7 @@ Repository: https://github.com/x-does/endless_psychosis.git
 
 Deployment target: https://psychosis.xdoes.space — see [Hostinger setup](docs/HOSTINGER.md).
 
-Release process: feature PR → `dev` → test `/dev/` → owner-approved promotion PR → `main`. See [release and staging setup](docs/RELEASES.md).
+Release process: test → commit/push `main` → Hostinger auto-deploys the root site. All current game features are enabled by `npm run build`. See [main-only workflow](docs/RELEASES.md).
 
 ## HP Docker environment
 

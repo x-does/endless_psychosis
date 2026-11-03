@@ -31,9 +31,11 @@ async function check(options: { brokenStaging?: boolean; brokenProduction?: bool
     const ready = await get("/health/ready");
     assert.equal(ready.status, options.brokenProduction ? 503 : 200);
     assert.equal((await get("/health")).status, options.brokenProduction ? 503 : 200);
-    assert.equal((await get("/dev/health")).status, options.brokenStaging ? 503 : 200);
+    const legacy = await fetch(`http://127.0.0.1:${addr.port}/dev/`, { redirect: "manual" });
+    assert.equal(legacy.status,302);
+    assert.equal(legacy.headers.get('location'),'/');
   } finally { server.closeAllConnections(); server.close(); }
 }
-test("staging manifest failure does not prevent production serving", () => check({ brokenStaging: true }));
-test("production bundle failure leaves readiness and staging available", () => check({ brokenProduction: true }));
-test("managed import loads both apps without waiting for a database prepare promise", () => check({}));
+test("obsolete staging files cannot prevent production serving", () => check({ brokenStaging: true }));
+test("production bundle failure leaves readiness available", () => check({ brokenProduction: true }));
+test("managed import loads root app without waiting for database prepare", () => check({}));

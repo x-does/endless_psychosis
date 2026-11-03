@@ -6,9 +6,7 @@ gateway.enable("strict routing");
 gateway.disable("x-powered-by");
 
 let production = null;
-let staging = null;
 let productionFailure = null;
-let stagingFailure = null;
 
 function loadApplication(bundle, options) {
   return require(bundle).createApp(options);
@@ -18,7 +16,6 @@ gateway.get("/health/ready", (_req, res) => {
   res.set("Cache-Control", "no-store").status(production ? 200 : 503).json({
     status: production ? "ok" : "unavailable",
     production: production ? "loaded" : productionFailure,
-    staging: staging ? "loaded" : stagingFailure,
   });
 });
 
@@ -30,22 +27,7 @@ try {
   console.error("[endless] production application failed to load", error.code || error.name);
 }
 
-try {
-  const root = path.join(__dirname, "dist-dev");
-  if (fs.existsSync(path.join(root, "server/app.cjs"))) {
-    const release = JSON.parse(fs.readFileSync(path.join(root, "release.json"), "utf8"));
-    staging = loadApplication("./dist-dev/server/app.cjs", { staging: true, dist: root, commit: release.commit });
-    console.log("[endless] staging application loaded", release.commit);
-  } else stagingFailure = "staging_not_built";
-} catch (error) {
-  stagingFailure = "staging_load_failed";
-  console.error("[endless] staging application failed to load", error.code || error.name);
-}
-
-gateway.get("/dev", (_req, res) => res.redirect(302, "/dev/"));
-gateway.use("/dev", (req, res, next) => staging
-  ? staging(req, res, next)
-  : res.status(503).json({ error: stagingFailure }));
+gateway.use("/dev", (_req, res) => res.redirect(302, "/"));
 gateway.use((req, res, next) => production
   ? production(req, res, next)
   : res.status(503).json({ error: productionFailure }));

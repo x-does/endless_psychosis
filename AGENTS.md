@@ -1,8 +1,9 @@
-# Release workflow
+# Main-only workflow
 
-- Implement changes on feature branches based on `dev`. Open PRs targeting `dev`.
-- Run `npm run typecheck` and `npm run build:app` before committing.
-- Merging to `dev` publishes staging at `https://psychosis.xdoes.space/dev/` once Hostinger's main build is refreshed.
-- Promotion is a PR from `dev` to `main`. Never merge that PR or push directly to `main` without the owner's explicit approval for that release.
-- Production and staging share DB_* credentials but use separate tables: endless_saves and endless_dev_saves. Never copy production saves into staging automatically.
-- Hostinger serves production from main; `BUILD_STAGING=1` builds a pinned dev snapshot into `/dev`. Do not change the production hosting branch to dev.
+- The owner requests all completed, tested changes directly on `main`.
+- Run `npm test`, `npm run typecheck` and `npm run build:app` before committing/pushing.
+- Hostinger tracks `main` and automatically rebuilds https://psychosis.xdoes.space/ after pushes.
+- Do not use `dev`, `/dev`, staging snapshots or promotion PRs for new work.
+- The standard `npm run build` builds all current game features at `/`, ignoring legacy BUILD_STAGING settings.
+- Preserve production saves in `endless_saves`; do not copy or delete old staging saves.
+- Verify live deployment separately from GitHub push success.
