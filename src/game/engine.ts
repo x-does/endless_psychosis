@@ -15,6 +15,7 @@ import { AppearanceState, type Form } from "./appearance";
 import { drawAppearance } from "./drawAppearance";
 import { SATIRE_ENABLED, SATIRE_ITEMS, SatireState, type SatireOffer, type SatireId } from "./satire";
 import { reflectionFor, type Reflection } from "./reflection";
+import { BonusState, type BonusBat } from "./bonus";
 
 export type Phase = "run" | "boss" | "complete" | "dead";
 
@@ -26,6 +27,8 @@ export interface BossSnapshot {
 }
 
 export interface RunSnapshot {
+  bonus: BonusBat | null;
+  pulseCost: number;
   phase: Phase;
   mode: "chapter" | "endless";
   hp: number;
@@ -259,6 +262,8 @@ export class GameEngine {
   private sfx: Sfx;
   private coping = new CopingState();
   private appearance = new AppearanceState();
+  private bonus = new BonusState();
+  private slideHeld = false;
   private satire = new SatireState();
   private nextSatire = 45;
   private offeredChoices: CopingOffer | null = null;
@@ -493,6 +498,7 @@ export class GameEngine {
 
   setPaused(v: boolean) {
     this.paused = v;
+    if (v) this.slideEnd();
     if (!v) this.lastTime = performance.now();
   }
 
@@ -592,6 +598,7 @@ export class GameEngine {
   slideStart() {
     if (this.paused || this.phase === "dead" || this.phase === "complete") return;
     if (this.player.onGround) {
+      this.slideHeld = true;
       this.player.sliding = true;
       this.player.slideTimer = 0.6;
       this.sfx.slide();
@@ -602,8 +609,20 @@ export class GameEngine {
   }
 
   slideEnd() {
+    this.slideHeld = false;
     this.player.sliding = false;
     this.player.slideTimer = 0;
+  }
+
+  catchBonus(id: number) {
+    if (this.paused || this.phase !== "run") return;
+    const reward = this.bonus.claim(id);
+    if (!reward) return;
+    let label = "+25 XP";
+    if (reward === "heal" && this.hp < this.maxHp) { this.hp = Math.min(this.maxHp,this.hp+16); label = "+16 HP"; }
+    else if (reward === "heal" && this.focus < this.maxFocus) { this.focus = Math.min(this.maxFocus,this.focus+20); label = "+20 focus"; }
+    else this.addXp(25);
+    this.sfx.pickup(); this.cb.onToast(`Golden bat · ${label}`,"good"); this.emitSnapshot();
   }
 
   pulse() {
@@ -939,6 +958,7 @@ export class GameEngine {
     this.coping.tick(dt);
     if (SATIRE_ENABLED) this.satire.tick(dt,this.opts.reduceMotion);
     this.appearance.tick(dt);
+    this.bonus.tick(dt,this.phase === "run");
     if (SATIRE_ENABLED && this.phase === "run" && this.elapsed >= this.nextSatire && !this.levelPaused && this.coping.canOffer() && !this.satire.effect) {
       this.nextSatire = this.elapsed + 40;
       this.setPaused(true); this.cb.onSatireOffer(this.satire.checkpoint()); this.emitSnapshot(); return;
@@ -1052,7 +1072,7 @@ export class GameEngine {
     p.runCycle += dt * 9 * (this.runSpeed / (330 * this.scale));
     if (p.sliding) {
       p.slideTimer -= dt;
-      if (p.slideTimer <= 0) p.sliding = false;
+      if (p.slideTimer <= 0 && !this.slideHeld) p.sliding = false;
     }
     p.vy += 2500 * this.scale * dt;
     p.y += p.vy * dt;
@@ -1866,6 +1886,8 @@ export class GameEngine {
 
   private emitSnapshot() {
     this.cb.onSnapshot({
+      bonus: this.bonus.bat ? { ...this.bonus.bat } : null,
+      pulseCost: Math.max(this.satire.pulseCost,this.coping.pulseCost),
       phase: this.phase,
       mode: this.mode,
       hp: Math.max(0, Math.round(this.hp)),
