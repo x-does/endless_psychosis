@@ -16,6 +16,7 @@ import { drawAppearance } from "./drawAppearance";
 import { SATIRE_ENABLED, SATIRE_ITEMS, SatireState, type SatireOffer, type SatireId } from "./satire";
 import { reflectionFor, type Reflection } from "./reflection";
 import { BonusState, type BonusBat } from "./bonus";
+import {normalizeMoves,nextMove,PositionDash,SkillPress,HOLD_ALTERNATES,type Move} from './movement';
 
 export type Phase = "run" | "boss" | "complete" | "dead";
 
@@ -27,6 +28,10 @@ export interface BossSnapshot {
 }
 
 export interface RunSnapshot {
+  moves:Move[];
+  dashCooldown:number;
+  holdLabel:string|null;
+  holdArmed:boolean;
   bonus: BonusBat | null;
   pulseCost: number;
   phase: Phase;
@@ -81,11 +86,15 @@ export interface EngineCallbacks {
   onToast: (text: string, tone?: "good" | "bad" | "info") => void;
   onBossStart: (boss: BossSnapshot) => void;
   onPauseRequest: () => void;
+  onDiscovery:(move:Move)=>void;
+  onMoveLearned:(moves:Move[])=>void;
   onCopingOffer: (offer: CopingOffer) => void;
   onSatireOffer: (offer: SatireOffer) => void;
 }
 
 export interface EngineOptions {
+  unlockedMoves?:Move[];
+  completedFirstChapter?:boolean;
   canvas: HTMLCanvasElement;
   chapter: Chapter;
   chapterIndex: number;
@@ -264,6 +273,12 @@ export class GameEngine {
   private appearance = new AppearanceState();
   private bonus = new BonusState();
   private slideHeld = false;
+  private moves:Move[]=['jump'];
+  private discovering:Move|null=null;
+  private positionDash=new PositionDash();
+  private skillPress=new SkillPress();
+  private recoverySpace=0;
+  private alternateSlow=0;
   private satire = new SatireState();
   private nextSatire = 45;
   private offeredChoices: CopingOffer | null = null;
@@ -345,6 +360,7 @@ export class GameEngine {
   private keys = new Set<string>();
 
   private readonly onKeyDown = (e: KeyboardEvent) => {
+    if((e.target as HTMLElement)?.closest?.('button,input,textarea,select,[role="dialog"]'))return;
     if (["Space", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(e.code)) {
       e.preventDefault();
     }
@@ -366,11 +382,13 @@ export class GameEngine {
         break;
       case "KeyK":
       case "KeyE":
-        this.useActive();
+        this.skillStart();
         break;
+      case 'ArrowLeft':case 'KeyA':this.moveDash(-1);break;
+      case 'ArrowRight':case 'KeyD':this.moveDash(1);break;
       case "KeyP":
       case "Escape":
-        if (!this.coping.offered && !this.satire.offered) this.cb.onPauseRequest();
+        if (!this.discovering&&!this.coping.offered && !this.satire.offered) this.cb.onPauseRequest();
         break;
     }
   };
@@ -378,10 +396,12 @@ export class GameEngine {
   private readonly onKeyUp = (e: KeyboardEvent) => {
     this.keys.delete(e.code);
     if (["ArrowDown", "KeyS"].includes(e.code)) this.slideEnd();
+    if(['KeyK','KeyE'].includes(e.code))this.skillRelease();
   };
 
   constructor(opts: EngineOptions, cb: EngineCallbacks) {
     this.opts = opts;
+    this.moves=normalizeMoves(opts.unlockedMoves);
     this.cb = cb;
     this.canvas = opts.canvas;
     const ctx = this.canvas.getContext("2d");
@@ -464,7 +484,7 @@ export class GameEngine {
     const dy = this.groundY - this.lastGroundY;
     if (dy && this.player) {
       this.player.y += dy;
-      this.player.x = W * 0.22;
+      this.player.x = clamp(this.player.x,W*.12+this.player.w/2,W*.48-this.player.w/2);
       this.player.w = 32 * this.scale;
       this.player.h = 54 * this.scale;
       for (const e of this.enemies) {
@@ -499,6 +519,7 @@ export class GameEngine {
   setPaused(v: boolean) {
     this.paused = v;
     if (v) this.slideEnd();
+    if(v)this.skillCancel();
     if (!v) this.lastTime = performance.now();
   }
 
@@ -515,7 +536,20 @@ export class GameEngine {
   }
 
   private get slowFactor() {
-    return this.slowTimer > 0 || (this.coping.effect === "numb" && this.coping.boosting) ? 0.55 : 1;
+    return this.slowTimer > 0 || (this.coping.effect === "numb" && this.coping.boosting) ? 0.55 : this.alternateSlow > 0 ? .7 : 1;
+  }
+
+  moveDash(direction:-1|1){if(this.paused||this.phase==='dead'||this.phase==='complete'||this.player.sliding||!this.moves.includes(direction<0?'back':'forward'))return;this.positionDash.start(direction,this.player.x,this.W,this.scale,this.player.w);}
+  skillStart(){if(!this.paused&&this.active&&this.activeCooldown<=0)this.skillPress.begin(performance.now());}
+  skillCancel(){this.skillPress.cancel();}
+  skillRelease(){const mode=this.skillPress.release(performance.now(),this.moves.includes('hold'));if(mode)this.useActive(mode==='hold');}
+  acknowledgeDiscovery(){if(!this.discovering)return;this.moves=normalizeMoves([...this.moves,this.discovering]);this.discovering=null;this.recoverySpace=2;this.spawnTimer=Math.max(this.spawnTimer,2);this.cb.onMoveLearned([...this.moves]);this.setPaused(false);this.emitSnapshot();}
+  private tryDiscovery(){
+    if(this.phase!=='run'||!this.player.onGround||this.levelPaused||this.coping.offered||this.satire.offered)return false;
+    const move=nextMove(this.moves,this.distance,!!this.opts.completedFirstChapter||this.level>=3);if(!move)return false;
+    const danger=this.player.x+this.runSpeed*1.5+90*this.scale;
+    if(this.enemies.some(e=>!e.dead&&e.x+e.w>this.player.x-40&&e.x<danger)||this.obstacles.some(o=>o.x+o.w>this.player.x-40&&o.x<danger)||this.projectiles.some(p=>p.kind!=='calm'))return false;
+    this.discovering=move;this.setPaused(true);this.cb.onDiscovery(move);return true;
   }
 
   chooseCoping(id: CopingId | null) {
@@ -597,6 +631,7 @@ export class GameEngine {
 
   slideStart() {
     if (this.paused || this.phase === "dead" || this.phase === "complete") return;
+    if(!this.moves.includes('crouch'))return;
     if (this.player.onGround) {
       this.slideHeld = true;
       this.player.sliding = true;
@@ -678,7 +713,7 @@ export class GameEngine {
     this.satire.firedPulse();
   }
 
-  useActive() {
+  useActive(held=false) {
     if (this.paused || this.phase === "dead" || this.phase === "complete") return;
     if (!this.active) {
       this.cb.onToast("No technique equipped. Visit the Journal.", "info");
@@ -694,7 +729,13 @@ export class GameEngine {
     this.coping.hits = [];
     this.sfx.technique();
     haptic(this.opts.haptics, [15, 30, 15]);
-    this.applyActiveEffect(tech);
+    if(held&&this.moves.includes('hold')&&tech.effect.mode==='active'){
+      const alt=HOLD_ALTERNATES[tech.effect.action];
+      if(alt.action==='purge')this.projectiles=this.projectiles.filter(p=>p.kind==='calm');
+      else if(tech.effect.action==='purge')this.alternateSlow=3;
+      else this.applyActiveEffect({...tech,effect:{mode:'active',action:alt.action,power:alt.power,duration:alt.duration}});
+      this.cb.onToast(`Held ${tech.name}: ${alt.label}`,'good');
+    }else this.applyActiveEffect(tech);
     this.popup(
       this.player.x,
       this.player.y - 90 * this.scale,
@@ -958,6 +999,8 @@ export class GameEngine {
     this.coping.tick(dt);
     if (SATIRE_ENABLED) this.satire.tick(dt,this.opts.reduceMotion);
     this.appearance.tick(dt);
+    this.recoverySpace=Math.max(0,this.recoverySpace-dt);this.alternateSlow=Math.max(0,this.alternateSlow-dt);
+    if(this.tryDiscovery())return;
     this.bonus.tick(dt,this.phase === "run");
     if (SATIRE_ENABLED && this.phase === "run" && this.elapsed >= this.nextSatire && !this.levelPaused && this.coping.canOffer() && !this.satire.effect) {
       this.nextSatire = this.elapsed + 40;
@@ -1002,10 +1045,12 @@ export class GameEngine {
       }
       this.spawnTimer -= dt * (this.slowFactor < 1 ? 0.7 : 1);
       if (this.spawnTimer <= 0) {
+        if(nextMove(this.moves,this.distance,!!this.opts.completedFirstChapter||this.level>=3)){this.spawnTimer=.5;}else{
         this.spawn();
         const diff = this.difficultyNow();
         const gap = clamp(1.3 - diff * 0.09 - this.elapsed * 0.003, 0.48, 1.3);
         this.spawnTimer = gap * rand(0.82, 1.22) * this.satire.speed;
+        }
       }
     }
 
@@ -1018,6 +1063,7 @@ export class GameEngine {
 
     this.scroll += this.runSpeed * dt;
     this.updatePlayer(dt);
+    if(this.paused)return;
     this.updateEnemies(dt);
     if (this.paused) return;
     this.updateObstacles(dt);
@@ -1093,7 +1139,16 @@ export class GameEngine {
         this.jump();
       }
     }
-    p.x = this.W * 0.22;
+    const oldX=p.x;
+    p.x=this.positionDash.tick(dt,p.x,this.W,p.w);
+    // Sweep the movement path at <=4px steps to prevent dashing through contact hazards.
+    const targetX=p.x;const steps=Math.max(1,Math.ceil(Math.abs(targetX-oldX)/4));
+    if(Math.abs(targetX-oldX)>.001)for(let i=1;i<=steps;i++){
+      p.x=oldX+(targetX-oldX)*i/steps;const r=this.playerRect();
+      for(const e of this.enemies)if(!e.dead&&r.x<e.x+e.w&&r.x+r.w>e.x&&r.y<e.y+e.h&&r.y+r.h>e.y){this.hurt(24);if(this.paused||this.phase==='dead')return;this.damageEnemy(e,99);}
+      for(const o of this.obstacles)if(r.x<o.x+o.w&&r.x+r.w>o.x&&r.y<o.y+o.h&&r.y+r.h>o.y){this.hurt(22);o.hitFlash=1;if(this.paused||this.phase==='dead')return;}
+      for(const shot of this.projectiles)if(shot.kind!=='calm'&&Math.hypot(shot.x-clamp(shot.x,r.x,r.x+r.w),shot.y-clamp(shot.y,r.y,r.y+r.h))<shot.r){this.hurt(shot.damage);shot.x=-9999;if(this.paused||this.phase==='dead')return;}
+    }
     if (Math.random() < 0.35) {
       this.particles.push({
         x: p.x - p.w * 0.5 + rand(-6, 6),
@@ -1397,11 +1452,11 @@ export class GameEngine {
     const roll = Math.random();
     if (roll < 0.42) {
       const kinds: ObstacleKind[] = ["rock"];
-      if (this.chapter.difficulty >= 2) kinds.push("branch");
+      if (this.chapter.difficulty >= 2&&this.moves.includes('crouch')) kinds.push("branch");
       if (this.chapter.difficulty >= 3) kinds.push("puddle");
       this.spawnObstacle(pick(kinds));
     } else if (roll < 0.8) {
-      this.spawnEnemy(this.pickEnemy());
+      if(this.moves.includes('crouch'))this.spawnEnemy(this.pickEnemy());else this.spawnObstacle('rock');
     } else {
       this.spawnPickup();
     }
@@ -1841,6 +1896,7 @@ export class GameEngine {
   private hurt(amount: number) {
     if (
       this.paused ||
+      this.recoverySpace>0 ||
       this.phase === "dead" ||
       this.phase === "complete" ||
       this.invulnTimer > 0 ||
@@ -1886,6 +1942,9 @@ export class GameEngine {
 
   private emitSnapshot() {
     this.cb.onSnapshot({
+      moves:[...this.moves],dashCooldown:this.positionDash.cooldown,
+      holdLabel:this.active?.effect.mode==='active'?HOLD_ALTERNATES[this.active.effect.action].label:null,
+      holdArmed:this.skillPress.armed(performance.now(),this.moves.includes('hold')),
       bonus: this.bonus.bat ? { ...this.bonus.bat } : null,
       pulseCost: Math.max(this.satire.pulseCost,this.coping.pulseCost),
       phase: this.phase,

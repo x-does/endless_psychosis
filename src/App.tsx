@@ -4,6 +4,7 @@ import { COPING, SCENARIOS, effectPhaseSeconds, type CopingId, type CopingOffer 
 import { SATIRE_ITEMS, type SatireId, type SatireOffer } from "./game/satire";
 import { AppearanceState, APPEARANCE_MIX } from "./game/appearance";
 import { drawAppearance } from "./game/drawAppearance";
+import {MOVE_INFO,type Move} from './game/movement';
 
 function AppearancePreview({ current, delta, description }: {
   current: RunSnapshot["appearance"] | undefined;
@@ -205,6 +206,7 @@ export default function App() {
   const [canvasEl, setCanvasEl] = useState<HTMLCanvasElement | null>(null);
 
   const engineRef = useRef<GameEngine | null>(null);
+  const [discovery,setDiscovery]=useState<Move|null>(null);
   const [copingOffer, setCopingOffer] = useState<CopingOffer | null>(null);
   const [satireOffer, setSatireOffer] = useState<SatireOffer | null>(null);
   const restartRef = useRef(false);
@@ -292,9 +294,12 @@ export default function App() {
         sound: s.settings.sound,
         haptics: s.settings.haptics,
         reduceMotion: s.settings.reduceMotion,
+        unlockedMoves:s.unlockedMoves,completedFirstChapter:s.completedChapters.includes(0),
       },
       {
         onSnapshot: (snap) => setSnapshot(snap),
+        onDiscovery:setDiscovery,
+        onMoveLearned:(moves)=>setSave(prev=>{const next={...prev,unlockedMoves:moves};persist(next);saveRef.current=next;return next;}),
         onCopingOffer: (offer) => setCopingOffer(offer),
         onSatireOffer: (offer) => setSatireOffer(offer),
         onLevelUp: (choices, level) => setLevelUp({ choices, level }),
@@ -371,6 +376,7 @@ export default function App() {
   }, [screen, run, canvasEl, gameKey, showToast]);
 
   const startChapter = (chapterIndex: number, mode: "chapter" | "endless" = "chapter") => {
+    setDiscovery(null);
     setCopingOffer(null);
     setSatireOffer(null);
     setRun({ chapterIndex, mode });
@@ -397,7 +403,7 @@ export default function App() {
   };
 
   const openPause = () => {
-    if (introOpen || levelUp || complete || dead || copingOffer || satireOffer) return;
+    if (introOpen || levelUp || complete || dead || copingOffer || satireOffer || discovery) return;
     setPaused(true);
     engineRef.current?.setPaused(true);
   };
@@ -528,6 +534,12 @@ export default function App() {
       <GameScreen
         canvasRef={setCanvasEl}
         snapshot={snapshot}
+        discovery={discovery}
+        onDiscover={()=>{engineRef.current?.acknowledgeDiscovery();setDiscovery(null);}}
+        onDash={(direction)=>engineRef.current?.moveDash(direction)}
+        onSkillStart={()=>engineRef.current?.skillStart()}
+        onSkillRelease={()=>engineRef.current?.skillRelease()}
+        onSkillCancel={()=>engineRef.current?.skillCancel()}
         copingOffer={copingOffer}
         satireOffer={satireOffer}
         onSatireChoice={(id) => { engineRef.current?.chooseSatire(id); setSatireOffer(null); }}
@@ -1456,6 +1468,7 @@ function Toggle({
 // ------------------------------------------------------------------ game
 
 function GameScreen({
+  discovery,onDiscover,onDash,onSkillStart,onSkillRelease,onSkillCancel,
   satireOffer,
   onSatireChoice,
   copingOffer,
@@ -1493,6 +1506,10 @@ function GameScreen({
 }: {
   canvasRef: (el: HTMLCanvasElement | null) => void;
   snapshot: RunSnapshot | null;
+  discovery:Move|null;
+  onDiscover:()=>void;
+  onDash:(direction:-1|1)=>void;
+  onSkillStart:()=>void;onSkillRelease:()=>void;onSkillCancel:()=>void;
   copingOffer: CopingOffer | null;
   satireOffer: SatireOffer | null;
   onSatireChoice: (id: SatireId | null) => void;
@@ -1538,9 +1555,10 @@ function GameScreen({
   const gameScreenRef = useRef<HTMLDivElement | null>(null);
   const [bonusTop,setBonusTop] = useState<number|null>(null);
   const slideEndRef=useRef(onSlideEnd);slideEndRef.current=onSlideEnd;
-  const blocked = introOpen || paused || !!levelUp || !!complete || !!dead || !!copingOffer || !!satireOffer;
+  const blocked = introOpen || paused || !!levelUp || !!complete || !!dead || !!copingOffer || !!satireOffer || !!discovery;
+  const skillCancelRef=useRef(onSkillCancel);skillCancelRef.current=onSkillCancel;
   useEffect(()=>{
-    const stop=()=>slideEndRef.current();window.addEventListener('blur',stop);
+    const stop=()=>{slideEndRef.current();skillCancelRef.current();};window.addEventListener('blur',stop);
     if(blocked)stop();
     return()=>{window.removeEventListener('blur',stop);stop();};
   },[blocked]);
@@ -1550,10 +1568,10 @@ function GameScreen({
     const observer=new ResizeObserver(measure);observer.observe(root);const hud=root.querySelector('.hud');if(hud)observer.observe(hud);measure();return()=>observer.disconnect();
   },[]);
   useEffect(() => {
-    if (!copingOffer && !satireOffer) return;
+    if (!copingOffer && !satireOffer && !discovery) return;
     const previous = document.activeElement as HTMLElement | null;
     const dialog = copingDialogRef.current;
-    const siblings = [...(gameScreenRef.current?.children ?? [])].filter(el => !el.classList.contains("coping-overlay")) as HTMLElement[];
+    const siblings = [...(gameScreenRef.current?.children ?? [])].filter(el => !el.classList.contains("coping-overlay")&&!el.classList.contains('discovery-overlay')) as HTMLElement[];
     siblings.forEach(el => { el.inert = true; });
     dialog?.focus();
     const trap = (event: KeyboardEvent) => {
@@ -1570,7 +1588,7 @@ function GameScreen({
       if (previous?.isConnected && previous !== document.body) previous.focus();
       else gameScreenRef.current?.querySelector<HTMLButtonElement>(".hud-btn")?.focus();
     };
-  }, [copingOffer, satireOffer]);
+  }, [copingOffer, satireOffer,discovery]);
 
   return (
     <div ref={gameScreenRef} className={`game-screen state-${(snapshot?.mentalState ?? "Anchored").toLowerCase().replace(" ", "-")}`}>
@@ -1698,9 +1716,11 @@ function GameScreen({
         </div>
       )}
 
-      {!introOpen && !paused && !levelUp && !complete && !dead && !copingOffer && !satireOffer && (
-        <div className="controls">
-          <button
+      {!blocked && <>
+        <div className="controls movement-controls" aria-label="Movement">
+          {snapshot?.moves.includes('back')&&<button className="ctrl ctrl-back" aria-label="Dash backward" aria-disabled={(snapshot.dashCooldown??0)>0} onClick={()=>onDash(-1)}>←<span>Back</span><small>{snapshot.dashCooldown>0?`${snapshot.dashCooldown.toFixed(1)}s`:'A / ←'}</small></button>}
+          {snapshot?.moves.includes('forward')&&<button className="ctrl ctrl-forward" aria-label="Dash forward" aria-disabled={(snapshot.dashCooldown??0)>0} onClick={()=>onDash(1)}>→<span>Forward</span><small>{snapshot.dashCooldown>0?`${snapshot.dashCooldown.toFixed(1)}s`:'D / →'}</small></button>}
+          {snapshot?.moves.includes('crouch')&&<button
             className="ctrl ctrl-slide"
             onPointerDown={(e) => {
               e.preventDefault();
@@ -1710,36 +1730,36 @@ function GameScreen({
             onPointerUp={onSlideEnd}
             onLostPointerCapture={onSlideEnd}
             onPointerCancel={onSlideEnd}
-            onClick={(e)=>{if(e.detail===0)onSlideStart();}}
-            onKeyUp={onSlideEnd}
+            onKeyDown={(e)=>{if(['Space','Enter'].includes(e.code)){e.preventDefault();if(!e.repeat)onSlideStart();}}}
+            onKeyUp={(e)=>{if(['Space','Enter'].includes(e.code)){e.preventDefault();onSlideEnd();}}}
             onBlur={onSlideEnd}
             aria-label="Hold to slide"
           >
             <span className="ctrl-key">↓</span>
-            <span className="ctrl-label">Hold Slide</span>
+            <span className="ctrl-label">Crouch</span>
             <span className="ctrl-hint">S / ↓</span>
+          </button>}
+          <button className="ctrl ctrl-jump" aria-label="Jump" onClick={(e)=>{if(e.detail===0)onJump();}} onPointerDown={(e) => { e.preventDefault(); onJump(); }}>
+            <span className="ctrl-key">↑</span><span className="ctrl-label">Jump</span>
           </button>
-          <button className="ctrl ctrl-tech" aria-label={snapshot?.activeName?`Use ${snapshot.activeName}`:'No technique equipped'} aria-disabled={!activeReady||!snapshot?.activeName} onClick={(e)=>{if(e.detail===0&&activeReady)onActive();}} onPointerDown={(e) => { e.preventDefault(); if(activeReady&&snapshot?.activeName)onActive(); }}>
+        </div>
+        <div className="combat-controls" aria-label="Combat and skills">
+          {snapshot?.activeName&&<button className={`ctrl ctrl-tech ${snapshot.holdArmed?'hold-armed':''}`} aria-label={`${snapshot.activeName}${snapshot.moves.includes('hold')?`; hold: ${snapshot.holdLabel}`:''}`} aria-disabled={!activeReady} onPointerDown={(e)=>{e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);onSkillStart();}} onPointerUp={(e)=>{e.preventDefault();onSkillRelease();}} onPointerCancel={onSkillCancel} onLostPointerCapture={onSkillCancel} onBlur={onSkillCancel} onKeyDown={(e)=>{if(['Space','Enter'].includes(e.code)){e.preventDefault();if(!e.repeat)onSkillStart();}}} onKeyUp={(e)=>{if(['Space','Enter'].includes(e.code)){e.preventDefault();onSkillRelease();}}}>
             <span className="ctrl-key" style={{ color: snapshot?.activeName ? chapter.accent : undefined }}>
               {cooldownLeft > 0 ? cooldownLeft : "✧"}
             </span>
             <span className="ctrl-label">Skill</span>
-            <span className="ctrl-hint">
-              {snapshot?.activeName ? snapshot.activeName.split(" ")[0] : "Journal"}
-            </span>
-          </button>
+            {snapshot.moves.includes('hold')&&<small className="hold-caption">{snapshot.holdArmed?'Release: ': 'Hold: '}{snapshot.holdLabel}</small>}
+          </button>}
           <button className="ctrl ctrl-pulse" aria-label={`Pulse, ${snapshot?.pulseCost??18} focus`} aria-disabled={(snapshot?.focus??100)<(snapshot?.pulseCost??18)} onClick={(e)=>{if(e.detail===0)onPulse();}} onPointerDown={(e) => { e.preventDefault(); onPulse(); }}>
             <span className="ctrl-key">◉</span>
             <span className="ctrl-label">Pulse <small>{snapshot?.pulseCost??18}</small></span>
             <span className="ctrl-hint">J / F</span>
           </button>
-          <button className="ctrl ctrl-jump" aria-label="Jump" onClick={(e)=>{if(e.detail===0)onJump();}} onPointerDown={(e) => { e.preventDefault(); onJump(); }}>
-            <span className="ctrl-key">↑</span>
-            <span className="ctrl-label">Jump</span>
-            <span className="ctrl-hint">Space / W</span>
-          </button>
         </div>
-      )}
+      </>}
+
+      {discovery&&<div className="overlay discovery-overlay"><section ref={copingDialogRef} tabIndex={-1} className="modal-card narrow" role="dialog" aria-modal="true" aria-labelledby="discovery-title"><div className="eyebrow">A new movement · road paused</div><h2 id="discovery-title">{MOVE_INFO[discovery].title}</h2><p>{MOVE_INFO[discovery].text}</p><p className="muted small">Saved permanently when you continue. The road gives you two seconds of recovery space.</p><button className="btn primary wide" onClick={onDiscover}>Learn it & continue</button></section></div>}
 
       {introOpen && (
         <div className="overlay intro-overlay">
@@ -1785,7 +1805,7 @@ function GameScreen({
               <div>TAP <span className="ctrl-key">◉</span> pulse</div>
               <div>TAP technique</div>
             </div>
-            <p className="intro-note">Left thumb holds Slide. Right thumb taps Jump. Pulse and Skill sit between them. Tap the golden BONUS bat in the sky for XP or healing—missing it has no penalty.</p>
+            <p className="intro-note">Start with Jump. Discover crouching and positional dashes one at a time on the road. Movement lives below your left thumb; combat has its own column on the right. Tap a golden BONUS bat for XP or healing.</p>
             <p className="intro-note">Strain rises when you stumble. Three hits in 12 seconds open a coping choice. Healthy responses cost no focus. Shortcuts offer power now and a stated cost afterward. You can always continue without choosing either.</p>
             <p className="intro-note">{CONTENT_NOTE}</p>
             <button className="btn primary big wide" onClick={onBegin}>

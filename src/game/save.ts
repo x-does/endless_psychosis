@@ -1,5 +1,6 @@
 import { TECHNIQUE_BY_ID, type Technique } from "./content";
 import { SAVE_KEY as KEY } from "./environment";
+import {normalizeMoves,type Move} from './movement';
 
 export interface Settings {
   sound: boolean;
@@ -8,6 +9,7 @@ export interface Settings {
 }
 
 export interface SaveData {
+  unlockedMoves?: Move[];
   version: number;
   createdAt: string;
   playerName: string;
@@ -31,6 +33,7 @@ export interface SaveData {
 export function newSave(): SaveData {
   return {
     version: 1,
+    unlockedMoves: ['jump'],
     createdAt: new Date().toISOString(),
     playerName: "Wanderer",
     level: 1,
@@ -55,6 +58,7 @@ export function normalizeSave(parsed: Partial<SaveData>): SaveData {
   const merged: SaveData = {
     ...base,
     ...parsed,
+    unlockedMoves: normalizeMoves(parsed.unlockedMoves),
     settings: { ...base.settings, ...(parsed.settings ?? {}) },
     learned: Array.isArray(parsed.learned)
       ? parsed.learned.filter((id) => Boolean(TECHNIQUE_BY_ID[id]))
