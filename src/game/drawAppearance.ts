@@ -1,9 +1,11 @@
 import type { AppearanceState } from "./appearance";
 import type { CopingId } from "./coping";
+import type { SatireId } from "./satire";
 
 export function drawAppearance(ctx: CanvasRenderingContext2D, a: AppearanceState,
   x: number, feet: number, h: number, s: number, cycle: number, reduced: boolean,
-  effect: CopingId | null, aftermath: boolean) {
+  effect: CopingId | null, aftermath: boolean,
+  satire: { id: SatireId; aftermath: boolean; remaining: number; charges?:number } | null = null) {
   const { radiance: r, echo: e, bone: b } = a;
   const top = feet - h, cy = top + h * .46;
   ctx.save();
@@ -58,6 +60,35 @@ export function drawAppearance(ctx: CanvasRenderingContext2D, a: AppearanceState
     ctx.beginPath(); ctx.moveTo(-14 * s, h); ctx.lineTo(-6 * s, h); ctx.moveTo(6 * s, h); ctx.lineTo(14 * s, h); ctx.stroke();
   }
   ctx.restore();
+  if (a.cue) {
+    ctx.save(); ctx.strokeStyle=a.cue.color; ctx.globalAlpha=.7; ctx.lineWidth=1.5*s;
+    ctx.beginPath(); ctx.ellipse(x,feet-h*.45,19*s,h*.58,0,0,Math.PI*2);ctx.stroke();ctx.restore();
+  }
+  if (satire) {
+    ctx.save(); ctx.lineWidth=2*s;ctx.globalAlpha=.8;
+    ctx.strokeStyle=satire.id==='express'?'#ffa36e':satire.id==='orders'?'#ffb077':satire.id==='subscription'?'#8be2c8':satire.id==='revelation'?'#c2a7ff':satire.id==='certificate'?'#f3df9b':'#a4d9f0';
+    if(satire.aftermath)ctx.setLineDash([4*s,5*s]);
+    ctx.beginPath();
+    if(satire.aftermath)ctx.ellipse(x,cy,21*s,h*.55,0,0,Math.PI*2);
+    else if(satire.id==='express') {
+      for(let i=0;i<3;i++){const y=top+h*(.35+i*.15);ctx.moveTo(x-9*s,y+4*s);ctx.lineTo(x,y);ctx.lineTo(x+9*s,y+4*s);}
+    } else if(satire.id==='orders') {
+      ctx.setLineDash([8*s,3*s]);ctx.ellipse(x,cy,21*s,h*.55,0,0,Math.PI*2);
+    } else if(satire.id==='subscription') {
+      const segments=Math.max(1,Math.ceil(satire.remaining));
+      for(let i=0;i<segments;i++){const angle=i*Math.PI*2/3;ctx.moveTo(x+Math.cos(angle)*23*s,cy+Math.sin(angle)*23*s);ctx.arc(x,cy,23*s,angle,angle+1.5);}
+    } else if(satire.id==='revelation'||satire.id==='certificate'){
+      const n=satire.id==='certificate'?(satire.charges??3):6;
+      for(let i=0;i<n;i++){const angle=i*Math.PI*2/(satire.id==='certificate'?3:6);ctx.moveTo(x+Math.cos(angle)*23*s,cy+Math.sin(angle)*23*s);ctx.lineTo(x+Math.cos(angle+.6)*17*s,cy+Math.sin(angle+.6)*17*s);ctx.lineTo(x+Math.cos(angle+1.2)*23*s,cy+Math.sin(angle+1.2)*23*s);}
+    } else ctx.ellipse(x,feet,22*s,5*s,0,0,Math.PI*2);
+    ctx.stroke();
+    if(satire.id==='orders'&&!satire.aftermath){
+      const angle=reduced?-.8:cycle*.12;
+      const cx=x+Math.cos(angle)*23*s, yy=cy+Math.sin(angle)*h*.52;
+      ctx.fillStyle='#ffdcb0';ctx.beginPath();ctx.arc(cx,yy,3*s,0,Math.PI*2);ctx.fill();
+    }
+    ctx.restore();
+  }
   if (!effect) return;
   ctx.save(); ctx.strokeStyle = ({ ground: "#7de3cd", compassion: "#ffd296", connect: "#9bdcff", bottle: "#bfafdb", push: "#ffa36e", numb: "#a8baff" })[effect];
   ctx.lineWidth = 2 * s; ctx.globalAlpha = .85;

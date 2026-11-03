@@ -13,6 +13,7 @@ export class AppearanceState {
   echo = 0;
   bone = 0;
   form: Form = "human";
+  cue: { color: string; remaining: number } | null = null;
   private time = 0;
   private damageTimes: number[] = [];
 
@@ -23,8 +24,15 @@ export class AppearanceState {
     this.resolveForm();
   }
   apply(id: CopingId) { this.add(...APPEARANCE_MIX[id]); }
+  signal(color: string) { this.cue = { color, remaining: 1.2 }; }
+  project(delta: readonly [number, number, number]) {
+    const next = new AppearanceState();
+    next.radiance=this.radiance; next.echo=this.echo; next.bone=this.bone; next.form=this.form;
+    next.add(...delta); return next;
+  }
   tick(dt: number) {
     this.time += dt;
+    if (this.cue) { this.cue.remaining = Math.max(0,this.cue.remaining-dt); if (!this.cue.remaining) this.cue=null; }
     this.add(-.008 * dt, -.008 * dt, -.008 * dt);
   }
   stumble() {

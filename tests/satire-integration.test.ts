@@ -18,3 +18,15 @@ test("blocked recovery checkpoint remains pending until satire effect expires",(
   engine.scenarioShown=engine.offerCoping();
   assert.equal(engine.scenarioShown,true);assert.equal(offers,1);
 });
+test("certificate counts fired pulses, not failed input, and captures projectile damage",()=>{
+  const e=Object.create(GameEngine.prototype) as any;
+  e.satire=new SatireState();e.satire.encounter=2;e.satire.checkpoint();e.satire.choose('certificate');
+  e.coping=new CopingState();e.phase='run';e.paused=false;e.activeCooldown=0;e.focus=0;
+  e.cb={onToast:()=>{}};e.pulse();assert.equal(e.satire.charges,3);
+  e.focus=100;e.scale=1;e.stats={pulseRadius:0};e.playerRect=()=>({x:0,y:0,w:32,h:54});
+  e.waves=[];e.projectiles=[];e.uid=1;e.chapter={accent:'#fff'};e.opts={haptics:false};e.sfx={pulse:()=>{}};
+  for(let i=0;i<3;i++){e.activeCooldown=0;e.pulse();}
+  assert.equal(e.satire.effect,null);assert.equal(e.focus,19);
+  assert.deepEqual(e.projectiles.map((p:any)=>p.damage),[2,2,2]);
+  assert.deepEqual(e.waves.map((w:any)=>w.damage),[2,2,2]);
+});

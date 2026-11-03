@@ -1,10 +1,12 @@
 # The Road to Absolute Nonsense
 
-Status: **first dev slice implemented**; full catalog and ending system remain planned. Extends Fracture & Recovery in PR #3. Numbers below are initial playtest targets, not claims about real substances or treatment.
+Status: **six-choice dev slice implemented**; full catalog and ending system remain planned. Extends Fracture & Recovery. Numbers below are initial playtest targets, not claims about real substances or treatment.
 
 ### Current slice
 
 Enable locally with `VITE_SATIRE=1 npm run dev`; the Hostinger `/dev` builder supplies this flag automatically. Normal production builds leave encounters disabled. Implemented four pickups, three encounter templates, run-local behavior axes/history and checkpoint escalation, .75s speed ramps capped at 1.15×, reduced-motion steady-speed substitution, explicit effect timers and no-effect-replacement guards. Encounters begin after 45 active seconds and recur no sooner than 40s later when the effect slot and coping cooldown are clear. Use Endless to reach all three scenes. The current seed-free slice uses stable tie-breaking; seeded variety, the other six pickups, complete route endings and dedicated satirical enemy art are follow-ups.
+
+Follow-up adds LSD: Revelation Edition and Enlightenment Certificate, with behavior-specific narration in all three encounter templates. Revelation slows only hostile projectiles (.70×) for 5s, then costs 27 focus per pulse for 7s, adding 10 strain. Certificate offers three successfully fired double-damage pulses within 6s at 27 focus each; it expires immediately after charge three or timeout. Friendly shots and movement are unaffected by Revelation. The third encounter offers both choices plus Water and Leave on every route. A geometric veil and three-charge luminous seal distinguish their appearances. Elite approved these exact rules; Mi was also consulted through its unchanged existing council configuration. Remaining planned pickups: Happy-Life Checklist, Productivity Halo, Community Soup, Unanswered Question.
 
 ## Direction
 
@@ -92,6 +94,8 @@ LSD-themed visions, meditation rituals, or mixed choices can all reveal the same
 Sample lines: “Your inner peace subscription has expired.” / “This revelation requires two forms of ID.” / “Congratulations. You have optimized the joy out of it.” / “The universe has read your complaint and marked it resolved.”
 
 ## 6. Enlightenment and endings
+
+Implemented staging reflections now select deterministically from accepted choice history on chapter completion or a failed attempt, never from decayed appearance/behavior axes. Priority: empty/Water-only → Ordinary Morning; mixed shortcut+restorative → Shape of a Way Through; Certificate+Subscription with three combined selections → Certified Infinite; Revelation or Subscription → Window Not an Answer; repeated dominant Express → Deadline Is Not a Destination; otherwise → Road Beyond the Receipt. Quit keeps its ordinary saved-progress flow. These narrative observations award no stats or unlocks and add no permanent save fields. Elite approved the exact history-only precedence and text through its unchanged council thread.
 
 Treat revelation as an interpretation, not a win meter. Use the encounter seed, event history and final choices to select ending fragments. No substance-only secret ending or permanent power advantage.
 
