@@ -1,34 +1,58 @@
-require("dotenv").config({ path: require("node:path").join(__dirname, ".env"), quiet: true });
-const { createApp, prepare } = require("./dist-server/app.cjs");
-
-const app = createApp();
-const fs = require("node:fs");
 const path = require("node:path");
-// Mount staging before the production SPA fallback by exporting an outer app.
+const fs = require("node:fs");
+require("dotenv").config({ path: path.join(__dirname, ".env"), quiet: true });
 const gateway = require("express")();
 gateway.enable("strict routing");
-if (fs.existsSync(path.join(__dirname, "dist-dev/server/app.cjs"))) {
-  const staging = require("./dist-dev/server/app.cjs");
-  const release = JSON.parse(fs.readFileSync(path.join(__dirname, "dist-dev/release.json"), "utf8"));
-  gateway.get("/dev", (_req, res) => res.redirect(302, "/dev/"));
-  gateway.use("/dev", staging.createApp({ staging: true, dist: path.join(__dirname, "dist-dev"), commit: release.commit }));
-} else {
-  gateway.use("/dev", (_req, res) => res.status(503).json({ error: "staging_not_built" }));
+gateway.disable("x-powered-by");
+
+let production = null;
+let staging = null;
+let productionFailure = null;
+let stagingFailure = null;
+
+function loadApplication(bundle, options) {
+  return require(bundle).createApp(options);
 }
-gateway.use(app);
-const ready = prepare().catch((error) => {
-  console.error("[endless] startup preparation failed", error);
+// Keep diagnostics available even if a bundle or staging manifest cannot load.
+gateway.get("/health/ready", (_req, res) => {
+  res.set("Cache-Control", "no-store").status(production ? 200 : 503).json({
+    status: production ? "ok" : "unavailable",
+    production: production ? "loaded" : productionFailure,
+    staging: staging ? "loaded" : stagingFailure,
+  });
 });
 
-const isMain = require.main === module;
-
-if (isMain) {
-  ready.then(() => {
-    const port = Number(process.env.PORT || 3000);
-    gateway.listen(port, "0.0.0.0", () => {
-      console.log(`[endless] listening on http://0.0.0.0:${port}`);
-    });
-  });
+try {
+  production = loadApplication("./dist-server/app.cjs");
+  console.log("[endless] production application loaded");
+} catch (error) {
+  productionFailure = "application_load_failed";
+  console.error("[endless] production application failed to load", error.code || error.name);
 }
 
+try {
+  const root = path.join(__dirname, "dist-dev");
+  if (fs.existsSync(path.join(root, "server/app.cjs"))) {
+    const release = JSON.parse(fs.readFileSync(path.join(root, "release.json"), "utf8"));
+    staging = loadApplication("./dist-dev/server/app.cjs", { staging: true, dist: root, commit: release.commit });
+    console.log("[endless] staging application loaded", release.commit);
+  } else stagingFailure = "staging_not_built";
+} catch (error) {
+  stagingFailure = "staging_load_failed";
+  console.error("[endless] staging application failed to load", error.code || error.name);
+}
+
+gateway.get("/dev", (_req, res) => res.redirect(302, "/dev/"));
+gateway.use("/dev", (req, res, next) => staging
+  ? staging(req, res, next)
+  : res.status(503).json({ error: stagingFailure }));
+gateway.use((req, res, next) => production
+  ? production(req, res, next)
+  : res.status(503).json({ error: productionFailure }));
+
+// Listening must not wait for MySQL. Each app gates only its database routes.
+if (require.main === module) {
+  const port = Number(process.env.PORT || 3000);
+  gateway.listen(port, "0.0.0.0", () => console.log(`[endless] listening on port ${port}`));
+}
 module.exports = gateway;
