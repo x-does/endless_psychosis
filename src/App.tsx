@@ -585,6 +585,7 @@ export default function App() {
         onSlideStart={() => engineRef.current?.slideStart()}
         onSlideEnd={() => engineRef.current?.slideEnd()}
         onPulse={() => engineRef.current?.pulse()}
+        onBonus={(id) => engineRef.current?.catchBonus(id)}
         onActive={() => engineRef.current?.useActive()}
         onOpenJournal={() => {
           setBackTo("game");
@@ -1486,6 +1487,7 @@ function GameScreen({
   onSlideStart,
   onSlideEnd,
   onPulse,
+  onBonus,
   onActive,
   onOpenJournal,
 }: {
@@ -1520,6 +1522,7 @@ function GameScreen({
   onSlideStart: () => void;
   onSlideEnd: () => void;
   onPulse: () => void;
+  onBonus: (id: number) => void;
   onActive: () => void;
   onOpenJournal: () => void;
 }) {
@@ -1533,6 +1536,19 @@ function GameScreen({
   const activeReady = snapshot ? snapshot.activeCooldown <= 0 : false;
   const copingDialogRef = useRef<HTMLElement | null>(null);
   const gameScreenRef = useRef<HTMLDivElement | null>(null);
+  const [bonusTop,setBonusTop] = useState<number|null>(null);
+  const slideEndRef=useRef(onSlideEnd);slideEndRef.current=onSlideEnd;
+  const blocked = introOpen || paused || !!levelUp || !!complete || !!dead || !!copingOffer || !!satireOffer;
+  useEffect(()=>{
+    const stop=()=>slideEndRef.current();window.addEventListener('blur',stop);
+    if(blocked)stop();
+    return()=>{window.removeEventListener('blur',stop);stop();};
+  },[blocked]);
+  useEffect(()=>{
+    const root=gameScreenRef.current;if(!root)return;
+    const measure=()=>{const hud=root.querySelector('.hud')?.getBoundingClientRect();const bounds=root.getBoundingClientRect();const top=(hud?.bottom??bounds.top)-bounds.top+24;setBonusTop(top+64<bounds.height*.64?top:null);};
+    const observer=new ResizeObserver(measure);observer.observe(root);const hud=root.querySelector('.hud');if(hud)observer.observe(hud);measure();return()=>observer.disconnect();
+  },[]);
   useEffect(() => {
     if (!copingOffer && !satireOffer) return;
     const previous = document.activeElement as HTMLElement | null;
@@ -1559,6 +1575,10 @@ function GameScreen({
   return (
     <div ref={gameScreenRef} className={`game-screen state-${(snapshot?.mentalState ?? "Anchored").toLowerCase().replace(" ", "-")}`}>
       <canvas ref={canvasRef} className="game-canvas" />
+      {!blocked && snapshot?.bonus && bonusTop!==null && <button className="bonus-bat" style={{top:bonusTop,left:`${snapshot.bonus.id%2?62:25}%`}} aria-label={`Catch golden bat: ${snapshot.bonus.reward==='xp'?'+25 XP':'healing bonus'}`} onClick={(event)=>{event.stopPropagation();onBonus(snapshot.bonus!.id);}}>
+        <svg width="44" height="26" viewBox="0 0 64 38" aria-hidden="true"><path d="M32 18 25 9 23 2 17 12 2 5 8 25 18 20 24 32 32 26 40 32 46 20 56 25 62 5 47 12 41 2 39 9Z" fill="currentColor"/><circle cx="28" cy="18" r="2" fill="#21172b"/><circle cx="36" cy="18" r="2" fill="#21172b"/></svg>
+        <span>BONUS</span><strong>{snapshot.bonus.reward==='xp'?'+25 XP':'+16 HP'}</strong>
+      </button>}
 
       <div className="hud">
         <div className="hud-top">
@@ -1684,31 +1704,36 @@ function GameScreen({
             className="ctrl ctrl-slide"
             onPointerDown={(e) => {
               e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
               onSlideStart();
             }}
             onPointerUp={onSlideEnd}
-            onPointerLeave={onSlideEnd}
+            onLostPointerCapture={onSlideEnd}
             onPointerCancel={onSlideEnd}
+            onClick={(e)=>{if(e.detail===0)onSlideStart();}}
+            onKeyUp={onSlideEnd}
+            onBlur={onSlideEnd}
+            aria-label="Hold to slide"
           >
             <span className="ctrl-key">↓</span>
-            <span className="ctrl-label">Slide</span>
+            <span className="ctrl-label">Hold Slide</span>
             <span className="ctrl-hint">S / ↓</span>
           </button>
-          <button className="ctrl ctrl-tech" onPointerDown={(e) => { e.preventDefault(); onActive(); }}>
+          <button className="ctrl ctrl-tech" aria-label={snapshot?.activeName?`Use ${snapshot.activeName}`:'No technique equipped'} aria-disabled={!activeReady||!snapshot?.activeName} onClick={(e)=>{if(e.detail===0&&activeReady)onActive();}} onPointerDown={(e) => { e.preventDefault(); if(activeReady&&snapshot?.activeName)onActive(); }}>
             <span className="ctrl-key" style={{ color: snapshot?.activeName ? chapter.accent : undefined }}>
               {cooldownLeft > 0 ? cooldownLeft : "✧"}
             </span>
-            <span className="ctrl-label">Technique</span>
+            <span className="ctrl-label">Skill</span>
             <span className="ctrl-hint">
               {snapshot?.activeName ? snapshot.activeName.split(" ")[0] : "Journal"}
             </span>
           </button>
-          <button className="ctrl ctrl-pulse" onPointerDown={(e) => { e.preventDefault(); onPulse(); }}>
+          <button className="ctrl ctrl-pulse" aria-label={`Pulse, ${snapshot?.pulseCost??18} focus`} aria-disabled={(snapshot?.focus??100)<(snapshot?.pulseCost??18)} onClick={(e)=>{if(e.detail===0)onPulse();}} onPointerDown={(e) => { e.preventDefault(); onPulse(); }}>
             <span className="ctrl-key">◉</span>
-            <span className="ctrl-label">Pulse</span>
+            <span className="ctrl-label">Pulse <small>{snapshot?.pulseCost??18}</small></span>
             <span className="ctrl-hint">J / F</span>
           </button>
-          <button className="ctrl ctrl-jump" onPointerDown={(e) => { e.preventDefault(); onJump(); }}>
+          <button className="ctrl ctrl-jump" aria-label="Jump" onClick={(e)=>{if(e.detail===0)onJump();}} onPointerDown={(e) => { e.preventDefault(); onJump(); }}>
             <span className="ctrl-key">↑</span>
             <span className="ctrl-label">Jump</span>
             <span className="ctrl-hint">Space / W</span>
@@ -1756,10 +1781,11 @@ function GameScreen({
             )}
             <div className="intro-controls">
               <div>TAP <span className="ctrl-key">↑</span> jump</div>
-              <div>TAP <span className="ctrl-key">↓</span> slide</div>
+              <div>HOLD <span className="ctrl-key">↓</span> slide</div>
               <div>TAP <span className="ctrl-key">◉</span> pulse</div>
               <div>TAP technique</div>
             </div>
+            <p className="intro-note">Left thumb holds Slide. Right thumb taps Jump. Pulse and Skill sit between them. Tap the golden BONUS bat in the sky for XP or healing—missing it has no penalty.</p>
             <p className="intro-note">Strain rises when you stumble. Three hits in 12 seconds open a coping choice. Healthy responses cost no focus. Shortcuts offer power now and a stated cost afterward. You can always continue without choosing either.</p>
             <p className="intro-note">{CONTENT_NOTE}</p>
             <button className="btn primary big wide" onClick={onBegin}>
