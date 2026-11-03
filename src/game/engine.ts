@@ -14,6 +14,7 @@ import { COPING, CopingState, SCENARIOS, strainState, type CopingId, type Coping
 import { AppearanceState, type Form } from "./appearance";
 import { drawAppearance } from "./drawAppearance";
 import { SATIRE_ENABLED, SATIRE_ITEMS, SatireState, type SatireOffer, type SatireId } from "./satire";
+import { reflectionFor, type Reflection } from "./reflection";
 
 export type Phase = "run" | "boss" | "complete" | "dead";
 
@@ -53,6 +54,7 @@ export interface RunSnapshot {
 }
 
 export interface RunResult {
+  reflection?: Reflection;
   won: boolean;
   quit: boolean;
   distance: number;
@@ -879,6 +881,7 @@ export class GameEngine {
 
   private makeResult(won: boolean, quit = false): RunResult {
     return {
+      ...(SATIRE_ENABLED && !quit ? { reflection: reflectionFor(this.satire.history) } : {}),
       won,
       quit,
       distance: Math.floor(this.distance),

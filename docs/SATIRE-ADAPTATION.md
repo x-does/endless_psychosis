@@ -95,6 +95,8 @@ Sample lines: “Your inner peace subscription has expired.” / “This revelat
 
 ## 6. Enlightenment and endings
 
+Implemented staging reflections now select deterministically from accepted choice history on chapter completion or a failed attempt, never from decayed appearance/behavior axes. Priority: empty/Water-only → Ordinary Morning; mixed shortcut+restorative → Shape of a Way Through; Certificate+Subscription with three combined selections → Certified Infinite; Revelation or Subscription → Window Not an Answer; repeated dominant Express → Deadline Is Not a Destination; otherwise → Road Beyond the Receipt. Quit keeps its ordinary saved-progress flow. These narrative observations award no stats or unlocks and add no permanent save fields. Elite approved the exact history-only precedence and text through its unchanged council thread.
+
 Treat revelation as an interpretation, not a win meter. Use the encounter seed, event history and final choices to select ending fragments. No substance-only secret ending or permanent power advantage.
 
 - **A Window, Not an Answer:** insight is useful even without certainty.

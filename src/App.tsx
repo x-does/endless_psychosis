@@ -1898,6 +1898,11 @@ function GameScreen({
               <div><strong>{complete.result.level}</strong><span>level</span></div>
             </div>
 
+            {complete.result.reflection && <section className="run-reflection" aria-label="Run reflection">
+              <div className="eyebrow">You reached the end of this stretch.</div>
+              <h3>{complete.result.reflection.title}</h3><p>{complete.result.reflection.text}</p>
+            </section>}
+
             <div className="modal-actions wrap">
               <button className="btn ghost" onClick={onCompleteMap}>
                 Back to map
@@ -1929,6 +1934,10 @@ function GameScreen({
               <div><strong>{dead.enemiesDefeated}</strong><span>settled</span></div>
               <div><strong>{dead.level}</strong><span>level</span></div>
             </div>
+            {dead.reflection && <section className="run-reflection" aria-label="Run reflection">
+              <div className="eyebrow">This attempt ended. Your saved progress remains.</div>
+              <h3>{dead.reflection.title}</h3><p>{dead.reflection.text}</p>
+            </section>}
             <div className="dead-tip">
               <div className="eyebrow">A small thing for right now</div>
               <p>
