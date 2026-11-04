@@ -1,8 +1,10 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# Endless — The Long Way Home
+# Psychosis / Signal Lost
 
-A gentle, mobile-first endless runner about outrunning the fog, settling the spiral, and practicing healthy coping skills one chapter at a time.
+An atmospheric arena survival game with three pilots, three districts, six encounters, and a new upgrade build every run. Move with WASD/arrows or the touch pad; Space dashes, E activates your pilot’s signature skill. Weapons aim and fire automatically.
+
+See [the analysis, council decisions, mechanics, and rebuild plan](docs/SIGNAL-LOST.md). The new game stores device-local records separately; previous Endless saves and cloud data are preserved. The legacy systems described below remain in source and the server, but are not mounted by the remake.
 
 Built with React, TypeScript, Vite, Express 5, Drizzle ORM and MySQL. Deployed on Hostinger as a Node.js web app (same pattern as `letscook`).
 
@@ -115,7 +117,7 @@ DB_PASSWORD=your-strong-password
    - `https://your-domain/journal` loads the SPA (client-side route)
 3. Enable SSL in hPanel and force HTTPS.
 
-Use the `dev` branch for staging if desired, and `main` for production.
+All completed, tested work ships directly on `main`; Hostinger deploys the root site.
 
 ### Notes
 

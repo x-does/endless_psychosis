@@ -1,0 +1,1128 @@
+@import url("https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+:root {
+  font-family: "DM Sans", sans-serif;
+  color: #e6e9df;
+  background: #0b1217;
+  font-synthesis: none;
+  font-weight: 400;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+}
+button {
+  border: 0;
+  background: none;
+}
+button,
+canvas {
+  -webkit-tap-highlight-color: transparent;
+}
+button {
+  touch-action: manipulation;
+}
+::selection {
+  background: #b9f279;
+  color: #0b1217;
+}
+.signal-app {
+  --accent: #b9f279;
+  min-height: 100dvh;
+  background:
+    radial-gradient(ellipse at 70% 20%, #17252260, transparent 55%), #0b1217;
+}
+.topbar {
+  height: 86px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #ffffff12;
+  padding: 0 4.5%;
+  gap: 20px;
+}
+.wordmark {
+  font-family: "Barlow Condensed", sans-serif;
+  font-size: 21px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+}
+.wordmark > span {
+  color: var(--accent);
+  font-size: 32px;
+}
+.wordmark small {
+  font:
+    10px "IBM Plex Mono",
+    monospace;
+  letter-spacing: 1px;
+  color: #89958f;
+  border-left: 1px solid #ffffff30;
+  padding-left: 15px;
+  margin-left: 5px;
+}
+.top-actions {
+  display: flex;
+  align-items: center;
+  gap: 23px;
+  font:
+    10px "IBM Plex Mono",
+    monospace;
+  letter-spacing: 0.6px;
+}
+.top-actions button {
+  padding: 10px 0;
+  color: #a9b4ad;
+}
+.connection {
+  color: #9dab9f;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.connection i {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #b9f279;
+  box-shadow: 0 0 9px #b9f27980;
+}
+.hangar {
+  max-width: 1360px;
+  margin: auto;
+  padding: 62px 5% 35px;
+}
+.eyebrow,
+.section-heading,
+.intro-bottom,
+.card-top,
+.pilot-info > small,
+.stat-bars,
+.launch-strip small,
+.hangar-footer,
+.district-strip small,
+.district-strip > div > span,
+.run-meta,
+.integrity > span,
+.integrity > small,
+.arena-label,
+.boss-hud,
+.ability-buttons,
+.move-hint,
+.site-footer,
+.upgrade-grid small,
+.upgrade-grid b,
+.build-list {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 1px;
+}
+.eyebrow {
+  color: #a4b5a4;
+  display: block;
+}
+.tiny-cross {
+  color: var(--accent);
+  padding-right: 10px;
+}
+.intro h1 {
+  font-family: "Barlow Condensed", "Arial Narrow", sans-serif;
+  font-size: clamp(48px, 6.3vw, 84px);
+  font-weight: 600;
+  letter-spacing: -1px;
+  line-height: 0.98;
+  margin: 24px 0 22px;
+}
+.intro h1 em {
+  color: var(--accent);
+  font-style: normal;
+}
+.intro > p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #8c9d99;
+}
+.intro-bottom {
+  margin: 25px 0 44px;
+  color: #75877f;
+  display: flex;
+  gap: 13px;
+  font-size: 9px;
+}
+.intro-bottom b {
+  color: #536957;
+}
+.section-heading {
+  display: flex;
+  justify-content: space-between;
+  color: #c4cfc1;
+  padding-bottom: 17px;
+  border-bottom: 1px solid #ffffff15;
+}
+.section-heading small {
+  font-size: 9px;
+  color: #6a7b75;
+}
+.pilot-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  padding-top: 18px;
+}
+.pilot-card {
+  --pilot: #b9f279;
+  position: relative;
+  text-align: left;
+  border: 1px solid #ffffff16;
+  background: #111c20;
+  overflow: hidden;
+  padding: 18px 22px 22px;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+  isolation: isolate;
+}
+.pilot-card:hover {
+  border-color: var(--pilot);
+}
+.pilot-card.selected {
+  border-color: var(--pilot);
+  background: linear-gradient(
+    150deg,
+    color-mix(in srgb, var(--pilot) 7%, #111b1c),
+    #111c20
+  );
+}
+.pilot-card.selected:after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--pilot);
+}
+.card-top {
+  display: flex;
+  justify-content: space-between;
+  color: #6a7d74;
+  font-size: 9px;
+}
+.selected .card-top {
+  color: var(--pilot);
+}
+.pilot-card canvas {
+  display: block;
+  width: 80%;
+  max-width: 250px;
+  margin: -6px auto -10px;
+  aspect-ratio: 1;
+}
+.pilot-info > small {
+  font-size: 8px;
+  color: var(--pilot);
+}
+.pilot-info h2 {
+  font:
+    600 38px "Barlow Condensed",
+    sans-serif;
+  margin: 5px 0;
+}
+.pilot-info p {
+  color: #94a29c;
+  font-size: 12px;
+  margin: 7px 0 22px;
+}
+.stat-bars {
+  display: flex;
+  gap: 25px;
+  color: #6c8075;
+  font-size: 8px;
+  border-top: 1px solid #ffffff0f;
+  padding-top: 15px;
+}
+.stat-bars b {
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--pilot);
+  margin-left: 10px;
+}
+.launch-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 35px;
+  padding: 27px 0 25px;
+  border-bottom: 1px solid #ffffff15;
+}
+.launch-strip > div {
+  max-width: 620px;
+}
+.launch-strip small {
+  font-size: 9px;
+  color: var(--accent);
+}
+.launch-strip p {
+  font-size: 12px;
+  color: #8c9e94;
+  line-height: 1.8;
+  margin: 8px 0 0;
+}
+.primary {
+  background: var(--accent);
+  color: #142016;
+  padding: 19px 27px;
+  font:
+    600 12px "IBM Plex Mono",
+    monospace;
+  letter-spacing: 1px;
+  min-height: 52px;
+}
+.primary:hover {
+  filter: brightness(1.1);
+}
+.launch {
+  display: flex;
+  min-width: 290px;
+  justify-content: space-between;
+  align-items: center;
+}
+.launch span {
+  font-size: 24px;
+}
+.hangar-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 0;
+  color: #5f766a;
+  font-size: 8px;
+}
+.hangar-footer button {
+  padding: 0;
+  color: #bccaba;
+  font: inherit;
+  letter-spacing: 1px;
+}
+.hangar-footer button span {
+  padding-left: 18px;
+  color: var(--accent);
+}
+.hangar-footer b {
+  padding: 0 10px;
+}
+.district-strip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 16px;
+  border: 1px solid #ffffff10;
+  background: #0c1519;
+}
+.district-strip > div {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  padding: 22px;
+  border-right: 1px solid #ffffff10;
+}
+.district-strip > div:last-child {
+  border: 0;
+}
+.district-strip > div > span {
+  color: #5a7163;
+}
+.district-strip > div > span:last-child {
+  margin-left: auto;
+}
+.district-strip small {
+  font-size: 8px;
+  color: #60786a;
+}
+.district-strip p {
+  font:
+    500 19px "Barlow Condensed",
+    sans-serif;
+  margin: 6px 0 0;
+  color: #a4b5a7;
+}
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  padding: 22px 4.5%;
+  border-top: 1px solid #ffffff0c;
+  font-size: 8px;
+  color: #53685e;
+  gap: 20px;
+}
+.game-layout {
+  max-width: 1260px;
+  margin: auto;
+  padding: 25px 4% 15px;
+}
+.run-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+  gap: 20px;
+}
+.run-heading h1 {
+  font:
+    500 32px "Barlow Condensed",
+    sans-serif;
+  margin: 8px 0 0;
+}
+.run-meta {
+  display: flex;
+  gap: 28px;
+  color: #6e877b;
+  font-size: 9px;
+}
+.run-meta b {
+  display: block;
+  font-size: 17px;
+  color: #d4dfd3;
+  margin-top: 8px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.arena-wrap {
+  position: relative;
+  border: 1px solid #ffffff20;
+  aspect-ratio: 1100/760;
+  max-height: calc(100dvh - 315px);
+  margin: auto;
+  overflow: hidden;
+  background: #0c151b;
+}
+.arena-wrap > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.arena-label {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 16px;
+  text-align: center;
+  pointer-events: none;
+  color: #c8dcc0;
+  font-size: 8px;
+}
+.boss-hud {
+  position: absolute;
+  top: 42px;
+  left: 25%;
+  right: 25%;
+  text-align: center;
+  color: #ffacba;
+  font-size: 10px;
+  pointer-events: none;
+}
+.boss-hud > div {
+  height: 4px;
+  background: #492e3b;
+  margin-top: 10px;
+}
+.boss-hud i {
+  height: 100%;
+  display: block;
+  background: #ff7c95;
+}
+.combat-dock {
+  display: flex;
+  gap: 25px;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 18px;
+}
+.integrity {
+  min-width: 210px;
+  flex: 1;
+  max-width: 350px;
+}
+.integrity > span {
+  display: flex;
+  justify-content: space-between;
+  color: var(--accent);
+  font-size: 10px;
+  gap: 12px;
+}
+.integrity small {
+  font-size: 8px;
+  color: #6e877b;
+}
+.integrity > small {
+  display: block;
+  margin-top: 8px;
+  letter-spacing: 0.3px;
+}
+.integrity b {
+  font-weight: 400;
+  color: #c5d5c8;
+}
+.health-track {
+  height: 5px;
+  background: #23332b;
+  margin-top: 10px;
+}
+.health-track i {
+  background: var(--accent);
+  display: block;
+  height: 100%;
+  transition: width 0.1s;
+}
+.move-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  color: #5f786a;
+  font-size: 8px;
+}
+.move-hint kbd {
+  font:
+    12px "IBM Plex Mono",
+    monospace;
+  color: #9bad9c;
+}
+.ability-buttons {
+  display: flex;
+  gap: 10px;
+}
+.ability-buttons button {
+  background: #18251f;
+  border: 1px solid #3b5140;
+  padding: 10px 17px;
+  min-width: 110px;
+  min-height: 56px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--accent);
+}
+.ability-buttons kbd {
+  font-size: 8px;
+  color: #839b88;
+}
+.ability-buttons strong {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+}
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #060d12e8;
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 25px;
+  overflow: auto;
+}
+.dialog {
+  width: min(840px, 100%);
+  text-align: center;
+  margin: auto;
+}
+.dialog h2 {
+  font:
+    500 clamp(28px, 4vw, 48px) "Barlow Condensed",
+    sans-serif;
+  margin: 14px 0;
+}
+.dialog > p {
+  color: #91a599;
+  font-size: 12px;
+  line-height: 1.8;
+  margin: 10px auto 25px;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+.dialog-actions > button:not(.primary) {
+  font:
+    10px "IBM Plex Mono",
+    monospace;
+  border: 1px solid #526651;
+  padding: 15px;
+}
+.upgrade-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  text-align: left;
+}
+.upgrade-grid button {
+  text-align: left;
+  border: 1px solid #3b5140;
+  background: #15231c;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+}
+.upgrade-grid button:hover {
+  border-color: var(--accent);
+}
+.upgrade-grid button > span {
+  font-size: 35px;
+  color: var(--accent);
+  margin-bottom: 20px;
+}
+.upgrade-grid small {
+  font-size: 8px;
+  color: var(--accent);
+}
+.upgrade-grid h3 {
+  font:
+    500 25px "Barlow Condensed",
+    sans-serif;
+  margin: 10px 0;
+}
+.upgrade-grid p {
+  font-size: 11px;
+  color: #9aac9d;
+  line-height: 1.8;
+  flex: 1;
+}
+.upgrade-grid b {
+  font-size: 8px;
+  color: var(--accent);
+  margin-top: 15px;
+}
+.build-list {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 25px;
+  color: #829983;
+  font-size: 8px;
+}
+.build-list span {
+  border: 1px solid #283d2b;
+  padding: 8px;
+}
+.help-overlay {
+  position: fixed;
+}
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 25px;
+  text-align: left;
+}
+.help-grid p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #93a797;
+}
+.help-grid b {
+  display: block;
+  color: var(--accent);
+  font:
+    11px "IBM Plex Mono",
+    monospace;
+  margin-bottom: 15px;
+}
+.dialog .muted {
+  font-size: 10px;
+  color: #809789;
+}
+.touch-row {
+  display: none;
+}
+.storage-warning {
+  position: fixed;
+  bottom: 15px;
+  left: 15px;
+  right: 15px;
+  background: #492d2a;
+  padding: 15px;
+  font-size: 12px;
+  z-index: 20;
+}
+@media (min-width: 1100px) {
+  .hangar {
+    position: relative;
+  }
+  .intro {
+    padding-right: 40%;
+  }
+  .intro:after {
+    content: "↯";
+    position: absolute;
+    top: 35px;
+    right: 14%;
+    font:
+      300 330px "Barlow Condensed",
+      sans-serif;
+    color: #b9f27906;
+    transform: rotate(-15deg);
+    pointer-events: none;
+  }
+}
+@media (max-width: 800px) {
+  .topbar {
+    height: 70px;
+    padding: 0 5%;
+  }
+  .wordmark {
+    font-size: 17px;
+  }
+  .wordmark small,
+  .connection {
+    display: none;
+  }
+  .top-actions {
+    gap: 14px;
+    font-size: 8px;
+  }
+  .hangar {
+    padding: 35px 5% 25px;
+  }
+  .intro h1 {
+    font-size: 60px;
+  }
+  .intro-bottom {
+    font-size: 7px;
+    gap: 8px;
+  }
+  .pilot-card {
+    padding: 14px;
+  }
+  .pilot-info h2 {
+    font-size: 30px;
+  }
+  .pilot-info p {
+    font-size: 10px;
+    min-height: 30px;
+  }
+  .stat-bars {
+    gap: 8px;
+    font-size: 7px;
+    flex-wrap: wrap;
+  }
+  .stat-bars b {
+    margin-left: 3px;
+  }
+  .launch-strip {
+    gap: 20px;
+  }
+  .launch {
+    min-width: 220px;
+    font-size: 10px;
+  }
+  .hangar-footer {
+    flex-wrap: wrap;
+  }
+  .hangar-footer > span:last-child,
+  .site-footer > span:nth-child(2) {
+    display: none;
+  }
+  .district-strip > div {
+    padding: 15px;
+    gap: 10px;
+  }
+  .district-strip p {
+    font-size: 16px;
+  }
+  .district-strip small {
+    font-size: 6px;
+  }
+  .run-meta {
+    gap: 15px;
+  }
+  .move-hint {
+    display: none;
+  }
+  .game-layout {
+    padding: 20px 3%;
+  }
+  .arena-wrap {
+    max-height: none;
+  }
+  .combat-dock {
+    gap: 15px;
+  }
+  .integrity {
+    min-width: 0;
+  }
+  .integrity > span {
+    font-size: 8px;
+  }
+  .integrity > span small {
+    display: none;
+  }
+  .ability-buttons button {
+    min-width: 100px;
+    padding: 10px;
+  }
+  .ability-buttons strong {
+    font-size: 8px;
+  }
+  .ability-buttons {
+    gap: 7px;
+  }
+  .overlay {
+    padding: 15px;
+  }
+  .upgrade-grid button {
+    padding: 12px;
+  }
+  .upgrade-grid button > span {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+  .upgrade-grid h3 {
+    font-size: 20px;
+  }
+  .upgrade-grid p {
+    font-size: 10px;
+  }
+  .dialog > p {
+    font-size: 10px;
+    margin-bottom: 15px;
+  }
+}
+@media (pointer: coarse) {
+  .touch-row {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    margin-top: 14px;
+  }
+  .joystick {
+    width: 120px;
+    height: 120px;
+    border: 1px solid #607a5b55;
+    border-radius: 50%;
+    touch-action: none;
+    position: relative;
+    background: radial-gradient(circle, #b9f27908, #b9f27902);
+  }
+  .joystick:before,
+  .joystick:after {
+    content: "";
+    position: absolute;
+    background: #b9f27915;
+  }
+  .joystick:before {
+    height: 1px;
+    width: 100%;
+    top: 50%;
+  }
+  .joystick:after {
+    width: 1px;
+    height: 100%;
+    left: 50%;
+  }
+  .joystick span {
+    position: absolute;
+    width: 38px;
+    height: 38px;
+    top: 40px;
+    left: 40px;
+    border: 1px solid #b9f27988;
+    background: #27352a;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  .touch-row p {
+    font:
+      9px/1.8 "IBM Plex Mono",
+      monospace;
+    color: #738e78;
+  }
+  .ability-buttons button {
+    min-height: 64px;
+  }
+  .ability-buttons kbd {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  .top-actions {
+    gap: 10px;
+  }
+  .top-actions button {
+    font-size: 7px;
+  }
+  .top-actions button > span {
+    display: none;
+  }
+  .wordmark {
+    font-size: 14px;
+    gap: 6px;
+    letter-spacing: 1px;
+  }
+  .wordmark > span {
+    font-size: 26px;
+  }
+  .intro h1 {
+    font-size: 50px;
+  }
+  .intro > p {
+    font-size: 12px;
+  }
+  .eyebrow {
+    font-size: 8px;
+    letter-spacing: 0.6px;
+  }
+  .section-heading {
+    font-size: 8px;
+  }
+  .section-heading small {
+    font-size: 7px;
+  }
+  .pilot-grid {
+    gap: 7px;
+  }
+  .pilot-card {
+    padding: 10px 9px;
+  }
+  .card-top {
+    font-size: 6px;
+    letter-spacing: 0;
+  }
+  .pilot-card canvas {
+    width: 130%;
+    max-width: none;
+    margin: 0 -15% -5px;
+  }
+  .pilot-info > small {
+    font-size: 6px;
+    letter-spacing: 0.3px;
+  }
+  .pilot-info h2 {
+    font-size: 28px;
+  }
+  .pilot-info p {
+    font-size: 9px;
+    line-height: 1.5;
+    min-height: 40px;
+    margin-bottom: 12px;
+  }
+  .stat-bars {
+    display: none;
+  }
+  .launch-strip {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 22px 0;
+  }
+  .launch {
+    min-width: 0;
+    width: 100%;
+    font-size: 11px;
+  }
+  .launch-strip small {
+    font-size: 8px;
+  }
+  .hangar-footer {
+    font-size: 7px;
+    gap: 15px;
+  }
+  .district-strip > div {
+    padding: 13px 9px;
+    gap: 5px;
+    align-items: flex-start;
+  }
+  .district-strip > div > span {
+    font-size: 7px;
+  }
+  .district-strip > div > span:last-child {
+    display: none;
+  }
+  .district-strip small {
+    display: none;
+  }
+  .district-strip p {
+    font-size: 15px;
+    margin: 0;
+  }
+  .site-footer {
+    font-size: 6px;
+    letter-spacing: 0.4px;
+  }
+  .run-heading h1 {
+    font-size: 25px;
+  }
+  .run-meta {
+    font-size: 7px;
+    gap: 10px;
+  }
+  .run-meta b {
+    font-size: 12px;
+  }
+  .run-meta > span:last-child {
+    display: none;
+  }
+  .run-heading {
+    margin-bottom: 13px;
+  }
+  .arena-label {
+    font-size: 6px;
+    letter-spacing: 0.2px;
+    top: 10px;
+  }
+  .boss-hud {
+    top: 27px;
+    left: 20%;
+    right: 20%;
+    font-size: 8px;
+  }
+  .boss-hud > div {
+    margin-top: 5px;
+  }
+  .combat-dock {
+    flex-wrap: wrap;
+  }
+  .integrity {
+    flex: 0 0 100%;
+    max-width: none;
+  }
+  .ability-buttons {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  .ability-buttons button {
+    flex: 1;
+    max-width: 48%;
+    text-align: center;
+    align-items: center;
+  }
+  .touch-row {
+    margin-top: -75px;
+    pointer-events: none;
+    height: 130px;
+    align-items: flex-start;
+  }
+  .joystick {
+    pointer-events: auto;
+    width: 100px;
+    height: 100px;
+  }
+  .joystick span {
+    left: 30px;
+    top: 30px;
+  }
+  .touch-row p {
+    display: none;
+  }
+  .ability-buttons {
+    padding-left: 120px;
+  }
+  .ability-buttons button {
+    max-width: none;
+    min-width: 0;
+  }
+  .overlay {
+    padding: 15px 10px;
+    align-items: flex-start;
+  }
+  .dialog h2 {
+    font-size: 27px;
+    margin: 8px 0;
+  }
+  .dialog > p {
+    font-size: 9px;
+    margin: 8px 0 12px;
+  }
+  .dialog .eyebrow {
+    font-size: 7px;
+  }
+  .upgrade-grid {
+    gap: 6px;
+  }
+  .upgrade-grid button {
+    padding: 9px 7px;
+  }
+  .upgrade-grid button > span {
+    display: none;
+  }
+  .upgrade-grid small {
+    font-size: 6px;
+    letter-spacing: 0;
+  }
+  .upgrade-grid h3 {
+    font-size: 18px;
+    margin: 6px 0;
+  }
+  .upgrade-grid p {
+    font-size: 9px;
+    line-height: 1.5;
+    margin: 4px 0;
+  }
+  .upgrade-grid b {
+    font-size: 6px;
+    letter-spacing: 0;
+    margin-top: 8px;
+  }
+  .dialog-actions {
+    gap: 8px;
+  }
+  .dialog-actions button {
+    font-size: 8px;
+    padding: 12px;
+    min-height: 40px;
+  }
+  .help-grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .help-grid p {
+    font-size: 11px;
+  }
+  .help-grid b {
+    margin-bottom: 5px;
+  }
+  .help-overlay {
+    align-items: center;
+  }
+  .help-overlay .dialog > p {
+    font-size: 11px;
+  }
+  .build-list {
+    margin-top: 12px;
+    font-size: 6px;
+    gap: 4px;
+  }
+  .build-list span {
+    padding: 5px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+  }
+}
