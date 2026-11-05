@@ -55,3 +55,48 @@ Rounds: 2
 Round 1 found multishot aim loss with even projectile counts, native Space activation blocked by gameplay controls, and healing after lethal damage in the same simulation frame. All were fixed with regressions. Round 2: satisfied with the initial game's ship criteria, no blocking findings. The reviewer independently reran 56 tests, typecheck, and production app/server build. Three-provider council satisfaction cannot be claimed because only GPT Sol completed reviews.
 
 Automated browser validation covered desktop launch, keyboard movement and abilities, pause/resume, help, native Space activation, preference persistence, preservation of legacy local keys, and a 390px mobile viewport with real touch input/cancellation. No page errors. A simple automated movement bot completed all six encounters as Rook; Vesper and Io require further human balance testing. This verifies reachability rather than equivalent difficulty.
+
+## Signal strain and mindset powerups
+
+Every pilot starts each encounter at 50 signal strain. Actual damage adds 20;
+blocked hits add nothing. A boss arrival adds 25. Ordinary kills remove 3,
+boss kills remove 20, repairs remove 12, and successful signature skill uses
+remove 8. The first event reaching 0 (clarity) or 100 (overload) offers a paused
+choice. Surviving an encounter guarantees the choice if neither threshold was
+reached. Death and final victory take precedence. The triggering event is
+remembered even when later events in the same frame move strain away from the
+threshold.
+
+Both options are always available, regardless of the trigger or pilot:
+
+- **Sane / Hold the signal:** 20% less incoming damage; signature skill cooldown
+  is 20% shorter. Standard weapons.
+- **Insane / Ride the interference:** 35% more weapon damage (including Io's
+  satellites); attack intervals are 10% shorter; incoming damage is 20% higher.
+  Standard signature skill cooldown and effect.
+
+Choose once per encounter. Retuning replaces the trait without stacking or
+refreshing an active cooldown. It persists through drafts and into subsequent
+encounters until replaced, then resets on a new run. Resuming a mid-combat
+choice gives 1.5 seconds of protection; all other simulation state freezes
+while choosing. The HUD displays current modifiers, strain, its latest cause,
+and when another choice becomes available. These are fictional signal states,
+not diagnoses or a moral judgment about either playstyle. Records and legacy
+saves are unchanged.
+
+If an encounter clear and a strain threshold occur in the same simulation
+frame, the clear takes priority: grant the single choice before the upgrade
+draft rather than returning to an already-finished fight. Sane is the
+forgiving survival/skill route; Insane rewards evasion with approximately 50%
+more sustained projectile DPS. These are initial tuning values, not evidence
+of equal player win rates. Human balance testing remains useful.
+
+Validation of this addition: 65 automated tests, typecheck, and production
+app/server build pass. Chromium checks at 1440px (keyboard) and 390px (coarse
+pointer/touch) verified frozen choices, both options, native Space activation,
+modal focus trapping, return to arena focus, trait replacement, touch movement,
+simultaneous movement/dash, cancellation, no horizontal overflow, and zero page
+errors. At 390px the joystick occupied y469–569, abilities y480–544, and the
+mindset HUD began at y599: movement and abilities remain adjacent without HUD
+overlap. Dash now preserves any longer existing immunity, including the full
+post-choice protection.

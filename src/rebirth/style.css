@@ -1126,3 +1126,36 @@ button {
     transition: none !important;
   }
 }
+
+.mindset-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.mindset-grid .trait-tradeoff {
+  color: #eee1d4;
+  flex: none;
+  border-top: 1px solid #435349;
+  padding-top: 10px;
+}
+.mindset-hud {
+  display: flex;
+  gap: 24px;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border: 1px solid #30463b;
+  background: #101d19;
+  font-size: 11px;
+  line-height: 1.7;
+}
+.mindset-hud > div { flex: 1; min-width: 0; }
+.mindset-hud strong, .mindset-hud span, .strain-readout small { display: block; }
+.mindset-hud span { color: #a9bbae; }
+.strain-readout label { display: flex; justify-content: space-between; }
+.strain-readout meter { display: block; width: 100%; height: 12px; accent-color: #8cdded; }
+.strain-readout small { font-size: 9px; color: #b9f279; }
+@media (max-width: 520px) {
+  .mindset-hud { flex-direction: column; gap: 10px; padding: 12px; }
+  .mindset-grid { gap: 10px; }
+  .mindset-grid button { padding: 12px 10px; }
+  .mindset-grid p { font-size: 11px; }
+  .mindset-grid small, .mindset-grid b { font-size: 8px; }
+}

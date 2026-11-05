@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { DISTRICTS, PILOTS, UPGRADES, draft, type PilotId } from "./content";
+import { DISTRICTS, MINDSETS, PILOTS, UPGRADES, draft, type PilotId } from "./content";
 import { Run, WIDTH, HEIGHT, type Vec } from "./model";
 import { draw, pilotArt } from "./render";
 import { readRecords, writeRecords } from "./storage";
@@ -222,10 +222,11 @@ export default function ArenaApp() {
   useEffect(() => {
     if (status === "draft") {
       setOffers(draft());
-      clearInput();
     }
+    if (status !== "playing" || paused) clearInput();
     if ((status && status !== "playing") || paused)
       document.querySelector<HTMLButtonElement>(".dialog button")?.focus();
+    else if (status === "playing") canvas.current?.focus();
   }, [status, paused]);
   function joystick(e: React.PointerEvent<HTMLDivElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -450,6 +451,8 @@ export default function ArenaApp() {
                   <span className="eyebrow">
                     {paused
                       ? "TRANSMISSION HELD"
+                      : status === "awakening"
+                        ? "SIGNAL CROSSROADS / SIMULATION PAUSED"
                       : status === "draft"
                         ? "SIGNAL ACQUIRED"
                         : status === "won"
@@ -459,6 +462,8 @@ export default function ArenaApp() {
                   <h2 id="dialog-title">
                     {paused
                       ? "Take a breath."
+                      : status === "awakening"
+                        ? "Choose your state of mind."
                       : status === "draft"
                         ? "Change your frequency."
                         : status === "won"
@@ -468,11 +473,32 @@ export default function ArenaApp() {
                   <p>
                     {paused
                       ? "The city can wait."
+                      : status === "awakening"
+                        ? `${run.awakeningReason} Both paths are yours. Your choice replaces your current trait and lasts until you retune; it never stacks.`
                       : status === "draft"
                         ? "Choose one upgrade. Restore 12 integrity between encounters."
                         : `${run.kills} signals cleared · ${clock(run.time)} survived · ${run.score.toLocaleString()} points`}
                   </p>
-                  {status === "draft" && !paused ? (
+                  {status === "awakening" && !paused ? (
+                    <div className="upgrade-grid mindset-grid">
+                      {MINDSETS.map((m) => (
+                        <button key={m.id}
+                          style={{ "--accent": m.color } as CSSProperties}
+                          onClick={() => {
+                            if (run.chooseMindset(m.id)) tone("upgrade", records.sound);
+                            clearInput();
+                            tick((n) => n + 1);
+                          }}>
+                          <span>{m.glyph}</span>
+                          <small>{m.title.toUpperCase()}{run.mindset === m.id ? " / CURRENT" : ""}</small>
+                          <h3>{m.name} powerup</h3>
+                          <p>{m.description}</p>
+                          <p className="trait-tradeoff">{m.tradeoff}</p>
+                          <b>CHOOSE {m.name.toUpperCase()} ↗</b>
+                        </button>
+                      ))}
+                    </div>
+                  ) : status === "draft" && !paused ? (
                     <div className="upgrade-grid">
                       {offers.map((u) => (
                         <button
@@ -523,6 +549,7 @@ export default function ArenaApp() {
                   )}
                   {(status === "dead" || status === "won") && !paused && (
                     <div className="build-list">
+                      {run.trait && <span>{run.trait.name} / {run.trait.title}</span>}
                       {UPGRADES.filter((u) => run.count(u.id) > 0).map((u) => (
                         <span key={u.id}>
                           {u.name} ×{run.count(u.id)}
@@ -633,6 +660,18 @@ export default function ArenaApp() {
               Weapons fire automatically
             </p>
           </div>
+          <section className="mindset-hud" aria-label="State of mind">
+            <div>
+              <strong style={{ color: run.trait?.color }}>{run.trait ? `${run.trait.name.toUpperCase()} / ${run.trait.title}` : "UNATTUNED / YOUR CHOICE IS AHEAD"}</strong>
+              <span>{run.trait ? `${run.trait.description} ${run.trait.tradeoff}` : "All pilots can choose Sane or Insane. Neither path is forced."}</span>
+            </div>
+            <div className="strain-readout">
+              <label htmlFor="signal-strain">SIGNAL STRAIN <b>{run.strain}/100</b></label>
+              <meter id="signal-strain" min={0} max={100} value={run.strain}>{run.strain}</meter>
+              <small>{run.attuned ? "RETUNE AVAILABLE NEXT ENCOUNTER" : "CHOOSE AT 0 / 100 OR ENCOUNTER CLEAR"}</small>
+              <span>{run.strainEvent}</span>
+            </div>
+          </section>
         </main>
       )}
       {help && (
@@ -662,6 +701,13 @@ export default function ArenaApp() {
               <p>
                 <b>03 / BREAK THROUGH</b>E or your skill button. Each pilot has
                 a unique ability with its own cooldown.
+              </p>
+              <p>
+                <b>04 / CHOOSE YOUR MINDSET</b>Damage (+20) and boss arrivals (+25)
+                raise signal strain. Kills (−3; bosses −20), repairs (−12), and skills (−8)
+                lower it. At 0 or 100, or after clearing an encounter, time stops:
+                choose Sane protection or Insane weapon power with increased damage taken.
+                Retune once per encounter. Traits replace each other and reset for a new run.
               </p>
             </div>
             <p className="muted">

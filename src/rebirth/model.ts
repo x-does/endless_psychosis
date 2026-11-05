@@ -1,4 +1,4 @@
-import { PILOTS, type PilotId, type UpgradeId } from "./content";
+import { MINDSETS, PILOTS, type MindsetId, type PilotId, type UpgradeId } from "./content";
 export const WIDTH = 1100,
   HEIGHT = 760;
 export type Vec = { x: number; y: number };
@@ -40,7 +40,38 @@ export class Run {
   wave = 0;
   kills = 0;
   score = 0;
-  status: "playing" | "draft" | "won" | "dead" = "playing";
+  status: "playing" | "awakening" | "draft" | "won" | "dead" = "playing";
+  mindset: MindsetId | null = null;
+  strain = 50;
+  strainEvent = "A new encounter begins at 50 strain.";
+  awakeningReason = "";
+  attuned = false;
+  private afterAwakening: "playing" | "draft" = "playing";
+  private thresholdReason = "";
+  get trait() {
+    return MINDSETS.find((m) => m.id === this.mindset);
+  }
+  private shiftStrain(amount: number, reason: string) {
+    this.strain = Math.max(0, Math.min(100, this.strain + amount));
+    this.strainEvent = reason;
+    if (!this.attuned && !this.thresholdReason && (this.strain === 0 || this.strain === 100))
+      this.thresholdReason = `${this.strain === 0 ? "Clarity" : "Overload"} reached. ${reason}`;
+  }
+  private awaken(next: "playing" | "draft", reason: string) {
+    this.afterAwakening = next;
+    this.awakeningReason = reason;
+    this.status = "awakening";
+  }
+  chooseMindset(id: MindsetId) {
+    if (this.status !== "awakening" || !MINDSETS.some((m) => m.id === id)) return false;
+    this.mindset = id;
+    this.attuned = true;
+    this.thresholdReason = "";
+    // Retuning changes future cooldowns, never refreshes an active one.
+    this.invincible = Math.max(this.invincible, 1.5);
+    this.status = this.afterAwakening;
+    return true;
+  }
   enemies: Enemy[] = [];
   shots: Shot[] = [];
   warnings: Warning[] = [];
@@ -73,7 +104,7 @@ export class Run {
     return this.upgrades[id] ?? 0;
   }
   get damage() {
-    return this.pilot.damage * (1 + 0.25 * this.count("power"));
+    return this.pilot.damage * (1 + 0.25 * this.count("power")) * (this.trait?.damage ?? 1);
   }
   get range() {
     return this.pilot.range * (1 + 0.25 * this.count("reach"));
@@ -87,14 +118,15 @@ export class Run {
   dash() {
     if (this.status !== "playing" || this.dashCd > 0) return false;
     this.dashTime = 0.19;
-    this.invincible = 0.32;
+    this.invincible = Math.max(this.invincible, 0.32);
     this.dashCd = 3 * Math.pow(0.85, this.count("stride"));
     this.burst(this.player, this.pilot.color, 12);
     return true;
   }
   skill() {
     if (this.status !== "playing" || this.skillCd > 0) return false;
-    this.skillCd = this.pilot.skillTime * Math.pow(0.8, this.count("skill"));
+    this.skillCd = this.pilot.skillTime * Math.pow(0.8, this.count("skill")) * (this.trait?.cooldown ?? 1);
+    this.shiftStrain(-8, "Signature skill used · −8 strain");
     this.pulse = 1;
     const power = 1 + 0.25 * this.count("power");
     if (this.pilot.id === "io") {
@@ -119,6 +151,10 @@ export class Run {
       this.hp = Math.min(this.maxHp, this.hp + 35);
     }
     this.wave++;
+    this.strain = 50;
+    this.strainEvent = "A new encounter begins at 50 strain.";
+    this.attuned = false;
+    this.thresholdReason = "";
     this.waveTime = 0;
     this.bossSpawned = false;
     this.spawn = 1.2;
@@ -132,7 +168,8 @@ export class Run {
   }
   private hurt(damage: number) {
     if (this.invincible > 0 || this.barrier > 0) return;
-    this.hp = Math.max(0, this.hp - damage);
+    this.hp = Math.max(0, this.hp - damage * (this.trait?.incoming ?? 1));
+    this.shiftStrain(20, "Integrity damaged · +20 strain");
     this.invincible = 0.75;
     this.burst(this.player, "#ff6e87", 10);
     if (this.hp <= 0) this.status = "dead";
@@ -155,6 +192,8 @@ export class Run {
     this.enemies = this.enemies.filter((e) => {
       if (e.hp > 0) return true;
       this.kills++;
+      this.shiftStrain(e.kind === "boss" ? -20 : -3,
+        e.kind === "boss" ? "Anomaly defeated · −20 strain" : "Signal cleared · −3 strain");
       if (this.kills % 9 === 0)
         this.pickups.push({
           x: e.x,
@@ -278,6 +317,7 @@ export class Run {
     if (this.wave % 2 === 1 && this.waveTime >= 25 && !this.bossSpawned) {
       this.bossSpawned = true;
       this.addEnemy("boss");
+      this.shiftStrain(25, "Anomaly arrived · +25 strain");
       this.shots = this.shots.filter((s) => !s.hostile);
     }
     this.fire -= dt;
@@ -301,6 +341,7 @@ export class Run {
         this.fire =
           this.pilot.interval *
           Math.pow(0.82, this.count("tempo")) *
+          (this.trait?.interval ?? 1) *
           (this.overdrive > 0 ? 0.5 : 1);
       }
     }
@@ -447,7 +488,10 @@ export class Run {
       p.life -= dt;
       if (distance(p, this.player) < 32) {
         p.life = 0;
-        if (p.kind === "repair") this.hp = Math.min(this.maxHp, this.hp + 22);
+        if (p.kind === "repair") {
+          this.hp = Math.min(this.maxHp, this.hp + 22);
+          this.shiftStrain(-12, "Repair collected · −12 strain");
+        }
         else if (p.kind === "barrier") this.barrier = 3;
         else this.overdrive = 5;
         this.burst(p, this.pilot.color, 12);
@@ -465,6 +509,10 @@ export class Run {
       this.warnings = [];
       this.hp = Math.min(this.maxHp, this.hp + 12);
       this.score += 250;
+      if (this.status === "draft" && !this.attuned)
+        this.awaken("draft", "Encounter survived. The quiet gives you a choice.");
+    } else if (!this.attuned && this.thresholdReason) {
+      this.awaken("playing", this.thresholdReason);
     }
   }
 }

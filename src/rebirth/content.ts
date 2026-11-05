@@ -1,4 +1,33 @@
 export type PilotId = "vesper" | "rook" | "io";
+export const MINDSETS = [
+  {
+    id: "sane",
+    name: "Sane",
+    title: "Hold the signal",
+    glyph: "◇",
+    description: "Take 20% less damage. Signature skill cooldown is 20% shorter.",
+    tradeoff: "Steady defense. Standard weapon damage and attack rate.",
+    incoming: 0.8,
+    damage: 1,
+    interval: 1,
+    cooldown: 0.8,
+    color: "#8cdded",
+  },
+  {
+    id: "insane",
+    name: "Insane",
+    title: "Ride the interference",
+    glyph: "↯",
+    description: "Deal 35% more weapon damage. Attack intervals are 10% shorter.",
+    tradeoff: "Take 20% MORE damage. Standard signature skill cooldown.",
+    incoming: 1.2,
+    damage: 1.35,
+    interval: 0.9,
+    cooldown: 1,
+    color: "#ffaf79",
+  },
+] as const;
+export type MindsetId = (typeof MINDSETS)[number]["id"];
 export const PILOTS = [
   {
     id: "vesper" as const,

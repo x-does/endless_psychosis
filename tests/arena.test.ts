@@ -60,6 +60,7 @@ test("all six encounters require clearing enemies, bosses gate their waves, and 
       r.boss!.hp = 0;
       r.step(0.01, { x: 0, y: 0 });
     }
+    if (r.status === "awakening") r.chooseMindset("sane");
     assert.equal(r.status, wave === 5 ? "won" : "draft");
     if (wave < 5) r.choose("power");
   }
