@@ -1,10 +1,10 @@
 <img src="assets/icon.svg" width="64" height="64" alt="">
 
-# Psychosis / Signal Lost
+# Endless Psychosis
 
-An atmospheric arena survival game with three pilots, three districts, six encounters, and a new upgrade build every run. Move with WASD/arrows or the touch pad; Space dashes, E activates your pilot’s signature skill. Weapons aim and fire automatically.
+A mobile-first incremental clicker about becoming slightly less online in 2026. Tap your transforming office human, collect focus, and invest in ten double-edged life upgrades. Chaos strengthens active taps; clarity improves passive income. Rebirth carries permanent echoes into the next loop.
 
-See [the analysis, council decisions, mechanics, and rebuild plan](docs/SIGNAL-LOST.md). The new game stores device-local records separately; previous Endless saves and cloud data are preserved. The legacy systems described below remain in source and the server, but are not mounted by the remake.
+The current game lives in `src/clicker/` and is mounted at `/`. It saves locally under `endless.clicker.v1`, with up to four hours of offline progress. The previous prototypes remain archived in source; their saves and production cloud data are preserved. The legacy cloud system documented below is not connected to the clicker.
 
 Built with React, TypeScript, Vite, Express 5, Drizzle ORM and MySQL. Deployed on Hostinger as a Node.js web app (same pattern as `letscook`).
 
@@ -34,7 +34,7 @@ npm run dev:api    # API on http://localhost:3000 (optional, for cloud saves)
 
 Vite proxies `/api` and `/health` to `http://localhost:3000`.
 
-Cloud saves are optional locally. Without a database the UI stays fully playable and saves to `localStorage` (`endless.save.v1`); `/api/save` returns `503 database_not_configured`.
+The clicker is fully playable without a database and saves to `localStorage` (`endless.clicker.v1`). Legacy `/api/save` returns `503 database_not_configured` when no database is configured.
 
 ### Local database (optional)
 
@@ -123,9 +123,9 @@ All completed, tested work ships directly on `main`; Hostinger deploys the root 
 
 - `dist/`, `dist-server/`, `node_modules/` and `.env` are ignored by git; the build creates them on the server.
 - The server serves the built SPA from `dist/` with an index.html fallback for client-side routes.
-- If the database is missing or unreachable, the game still works offline and the UI reports cloud saves as unavailable.
+- If the database is missing or unreachable, the clicker still works with device-local progress. Its UI reports local save status; legacy cloud saves are not connected to this game.
 
-## Cloud saves
+## Legacy cloud saves (preserved)
 
 - Each device generates a random 24-byte hex **sync code** stored in `localStorage` (`endless.cloud.code`).
 - The server stores saves keyed by `SHA-256(sync code)` in `endless_saves`; the raw code is never stored.

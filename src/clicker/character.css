@@ -1,0 +1,139 @@
+.ep-character {
+  display: block;
+  width: 100%;
+  max-width: 440px;
+  margin-inline: auto;
+  line-height: 0;
+  isolation: isolate;
+  pointer-events: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.ep-character-art {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.ep-character-aura {
+  opacity: calc(.15 + var(--ep-character-calm) * .85);
+  transition: opacity 900ms ease;
+}
+
+.ep-character-human {
+  transform-origin: 200px 335px;
+  animation: ep-character-breathe 5.5s ease-in-out infinite;
+}
+
+.ep-character-tap {
+  transform-origin: 200px 270px;
+  animation: ep-character-tap .36s cubic-bezier(.2, .7, .3, 1) both;
+}
+
+.ep-character-halo,
+.ep-character-calm-face {
+  opacity: var(--ep-character-calm);
+  transition: opacity 900ms ease;
+}
+
+.ep-character-tired-face,
+.ep-character-tie {
+  opacity: var(--ep-character-chaos);
+  transition: opacity 900ms ease;
+}
+
+.ep-character-robe {
+  opacity: calc(var(--ep-character-calm) * .8);
+  transition: opacity 900ms ease;
+}
+
+.ep-character-headset,
+.ep-character-coffee {
+  opacity: var(--ep-character-chaos);
+  transition: opacity 900ms ease;
+}
+
+.ep-character-foliage {
+  opacity: var(--ep-character-growth);
+  transform: scale(calc(.72 + var(--ep-character-growth) * .28));
+  transform-origin: 200px 340px;
+  transition: opacity 900ms ease, transform 1.2s ease;
+}
+
+.ep-character-pin {
+  opacity: min(1, calc(var(--ep-character-growth) * 4));
+  transition: opacity 700ms ease;
+}
+
+.ep-character-stars {
+  opacity: calc(.25 + var(--ep-character-calm) * .75);
+  transition: opacity 900ms ease;
+  animation: ep-character-shimmer 4s ease-in-out infinite alternate;
+}
+
+.ep-character-notifications {
+  opacity: calc(var(--ep-character-chaos) * .95);
+  transition: opacity 900ms ease;
+}
+
+.ep-character-card {
+  animation: ep-character-drift 6s ease-in-out infinite;
+}
+
+.ep-character-card-one {
+  transform-origin: 80px 173px;
+  animation-delay: -2s;
+}
+
+.ep-character-card-two {
+  transform-origin: 320px 135px;
+  animation-delay: -4s;
+}
+
+.ep-character-card-three {
+  transform-origin: 310px 280px;
+  animation-delay: -1s;
+  animation-duration: 7s;
+}
+
+.ep-character-steam {
+  animation: ep-character-shimmer 2.5s ease-in-out infinite alternate;
+}
+
+@keyframes ep-character-breathe {
+  0%, 100% { transform: translateY(1px) scale(1, 1); }
+  50% { transform: translateY(-2px) scale(1.006, 1.008); }
+}
+
+@keyframes ep-character-tap {
+  0% { transform: scale(1); }
+  32% { transform: translateY(-3px) scale(1.035, .975); }
+  65% { transform: scale(.99, 1.015); }
+  100% { transform: scale(1); }
+}
+
+@keyframes ep-character-drift {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-7px) rotate(2deg); }
+}
+
+@keyframes ep-character-shimmer {
+  from { opacity: .4; }
+  to { opacity: .85; }
+}
+
+.ep-character[data-reduced-motion] *,
+.ep-character[data-reduced-motion] {
+  animation: none !important;
+  transition: none !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ep-character,
+  .ep-character * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
