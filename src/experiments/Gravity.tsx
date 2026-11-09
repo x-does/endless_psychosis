@@ -1,124 +1,130 @@
-import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { advanceFlight, CAPTURE_RADIUS, LEGS, ORBIT_RADIUS, ORBIT_SPEED, orbitPoint, predictLaunch, tangent, TAU, type Point } from './gravity';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { CAPTURE_RADIUS, HOLD_SECONDS, ORBIT_RADIUS, ORBIT_SPEED, REVEAL_MAX, TAU, chamberAt, freshSession, press, release, stepSession, tangent, type Point, type Session } from './gravity';
 import './gravity.css';
 
-type Session = {
-  phase: 'intro' | 'orbit' | 'flight' | 'delivery' | 'complete';
-  leg: number; angle: number; point: Point; direction: Point;
-  deliveries: number; misses: number; paused: boolean; message: string; wait: number;
-};
-const fresh = (): Session => ({ phase: 'intro', leg: 0, angle: LEGS[0].startAngle, point: orbitPoint(LEGS[0].anchor, LEGS[0].startAngle), direction: { x: 0, y: 0 }, deliveries: 0, misses: 0, paused: false, message: 'Six small deliveries across a very big blue.', wait: 0 });
+function Anchor({ point, real, revealed }: { point: Point; real: boolean; revealed: boolean }) {
+  return <g transform={`translate(${point.x} ${point.y})`} className={`gravity-anchor${revealed ? ' is-revealed' : ''}`}>
+    {real ? <><circle r={CAPTURE_RADIUS}/><path d={`M -12 ${-CAPTURE_RADIUS} v 9 M 12 ${-CAPTURE_RADIUS} v 9`}/><circle r="12" className="gravity-anchor-core"/></>
+      : <><circle cx="4" cy="-3" r={CAPTURE_RADIUS} strokeDasharray="185 67" transform="rotate(28)"/><path d={`M 0 ${-CAPTURE_RADIUS - 3} v 10`}/><circle cx="4" cy="-3" r="12" strokeDasharray="25 50"/></>}
+  </g>;
+}
 
 export default function Gravity() {
-  const [session, setSession] = useState<Session>(fresh);
+  const [session, setSession] = useState<Session>(() => freshSession());
   const current = useRef(session);
-  const [practice, setPractice] = useState(false);
-  const glowId = useId().replace(/:/g, '');
+  const clock = useRef<number | null>(null);
+  const pointer = useRef<number | null>(null);
+  const lastRelease = useRef(-Infinity);
   const update = useCallback((next: Session) => { current.current = next; setSession(next); }, []);
-  const start = () => update({ ...fresh(), phase: 'orbit', message: 'Watch the dotted tangent. Launch when it reaches the destination.' });
-  const launch = useCallback(() => {
-    const s = current.current;
-    if (s.phase !== 'orbit' || s.paused) return;
-    update({ ...s, phase: 'flight', point: orbitPoint(LEGS[s.leg].anchor, s.angle), direction: tangent(s.angle), message: 'Special delivery, on its way…' });
-  }, [update]);
-
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.code !== 'Space' || event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, a, button:not([data-gravity-launch])')) return;
-      if (current.current.phase === 'orbit' && !current.current.paused) { event.preventDefault(); launch(); }
-    };
-    const onVisibility = () => {
-      const s = current.current;
-      if (document.hidden && s.phase !== 'intro' && s.phase !== 'complete') update({ ...s, paused: true, message: 'Paused while you were away. Resume when you’re ready.' });
-    };
-    window.addEventListener('keydown', onKey);
-    document.addEventListener('visibilitychange', onVisibility);
-    return () => { window.removeEventListener('keydown', onKey); document.removeEventListener('visibilitychange', onVisibility); };
-  }, [launch, update]);
+  // Events and animation share one clock: a release cannot race the hold threshold.
+  const synchronize = useCallback(() => {
+    const now = performance.now();
+    const next = stepSession(current.current, clock.current === null ? 0 : (now - clock.current) / 1000);
+    clock.current = now;
+    return next;
+  }, []);
+  const down = useCallback(() => update(press(synchronize())), [synchronize, update]);
+  const up = useCallback(() => { lastRelease.current = performance.now(); update(release(synchronize())); }, [synchronize, update]);
+  const pause = useCallback(() => {
+    const s = synchronize();
+    update({ ...s, held: null, paused: !s.paused });
+  }, [synchronize, update]);
 
   useEffect(() => {
     let frame = 0;
-    let previous = 0;
-    const tick = (now: number) => {
-      const dt = previous ? (now - previous) / 1000 : 0;
-      previous = now;
-      const s = current.current;
-      if (!s.paused && s.phase === 'orbit') {
-        const angle = (s.angle + ORBIT_SPEED * dt) % TAU;
-        update({ ...s, angle, point: orbitPoint(LEGS[s.leg].anchor, angle) });
-      } else if (!s.paused && s.phase === 'flight') {
-        const result = advanceFlight(LEGS[s.leg], s.point, s.direction, dt);
-        if (result.outcome === 'captured') {
-          const deliveries = s.deliveries + 1;
-          update({ ...s, point: result.point, deliveries, phase: deliveries === LEGS.length ? 'complete' : 'delivery', wait: 1.1, message: deliveries === LEGS.length ? 'Every little parcel found its planet.' : `Delivery ${deliveries} landed. A new orbit is waiting.` });
-        } else if (result.outcome !== 'flying') {
-          update({ ...s, phase: 'orbit', point: orbitPoint(LEGS[s.leg].anchor, s.angle), misses: s.misses + 1, message: result.outcome === 'collision' ? 'A moon got in the way. Back to your anchor — try again.' : 'A little wide. Back to your anchor — try again.' });
-        } else update({ ...s, point: result.point });
-      } else if (!s.paused && s.phase === 'delivery') {
-        const wait = s.wait - dt;
-        if (wait <= 0) {
-          const leg = s.leg + 1;
-          update({ ...s, leg, phase: 'orbit', angle: LEGS[leg].startAngle, point: orbitPoint(LEGS[leg].anchor, LEGS[leg].startAngle), message: LEGS[leg].hint });
-        } else update({ ...s, wait });
-      }
-      frame = requestAnimationFrame(tick);
-    };
+    const tick = () => { update(synchronize()); frame = requestAnimationFrame(tick); };
     frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [update]);
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' && e.code !== 'Enter') return;
+      if ((e.target as HTMLElement)?.closest('input, textarea, select, a, button:not([data-gravity-launch])')) return;
+      if (e.altKey || e.metaKey || e.ctrlKey) return;
+      e.preventDefault();
+      if (!e.repeat) down();
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' && e.code !== 'Enter') return;
+      if (current.current.held !== null) { e.preventDefault(); up(); }
+    };
+    const suspend = () => {
+      const s = synchronize();
+      if (s.phase === 'orbit' || s.phase === 'flight') update({ ...s, paused: true, held: null });
+    };
+    const visibility = () => { if (document.hidden) suspend(); };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    window.addEventListener('blur', suspend);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      window.removeEventListener('blur', suspend);
+      document.removeEventListener('visibilitychange', visibility);
+    };
+  }, [down, up, synchronize, update]);
 
-  const leg = LEGS[session.leg];
-  const prediction = predictLaunch(leg, session.angle);
-  const ready = prediction.outcome === 'captured';
+  const chamber = chamberAt(session.depth);
   const orbiting = session.phase === 'orbit';
-  const from = orbitPoint(leg.anchor, session.angle);
+  const revealing = session.held !== null && session.held >= HOLD_SECONDS && session.reveal > 0;
   const direction = tangent(session.angle);
-  const previewEnd = practice ? prediction.point : { x: from.x + direction.x * 82, y: from.y + direction.y * 82 };
-  const overlay = session.phase === 'intro' || session.phase === 'complete' || session.paused;
+  const overlay = session.phase === 'intro' || session.phase === 'ended' || session.paused;
+  const start = () => { clock.current = performance.now(); update(freshSession(true)); };
 
-  return <section className="gravity" aria-label="Borrowed Gravity game">
-    <header className="gravity-heading"><div><p className="gravity-eyebrow">A tiny orbital delivery service</p><h1>Borrowed Gravity<span aria-hidden="true">✳</span></h1></div>
-      {session.phase !== 'intro' && session.phase !== 'complete' && <button className="gravity-pause" onClick={() => update({ ...current.current, paused: !current.current.paused })}>{session.paused ? 'Resume' : 'Pause'}</button>}
+  return <section className="gravity" aria-label="Endless Psychosis: False Orbit">
+    <header className="gravity-heading"><div><p className="gravity-eyebrow">ENDLESS PSYCHOSIS</p><h1>FALSE ORBIT</h1></div>
+      {session.phase !== 'intro' && session.phase !== 'ended' && <button className="gravity-pause" onClick={pause}>{session.paused ? 'Resume' : 'Pause'}</button>}
     </header>
-    <div className="gravity-score" aria-label={`${session.deliveries} of 6 deliveries, ${session.misses} misses`}>
-      <span><strong>{String(session.deliveries).padStart(2, '0')}</strong> / 06 delivered</span><span><strong>{session.misses}</strong> {session.misses === 1 ? 'miss' : 'misses'}</span>
-    </div>
-    <div className="gravity-field">
-      <svg viewBox="0 0 360 350" role="img" aria-label={`Route ${session.leg + 1}: ${leg.name}. Amber courier orbits the paper planet; deliver to the glowing ring.`}>
-        <defs><radialGradient id={glowId}><stop offset="0" stopColor="#f9e7ac" stopOpacity=".3"/><stop offset="1" stopColor="#f9e7ac" stopOpacity="0"/></radialGradient></defs>
-        {Array.from({ length: 25 }, (_, i) => <circle key={i} cx={15 + (i * 83) % 332} cy={15 + (i * 67) % 322} r={i % 3 === 0 ? 1.3 : 0.7} fill="#e7e3cc" opacity={i % 3 === 0 ? 0.5 : 0.25}/>)}
-        <text x="18" y="25" className="gravity-map-label">SECTOR 0{session.leg + 1}</text>
-        <circle cx={leg.destination.x} cy={leg.destination.y} r="58" fill={`url(#${glowId})`}/>
-        <circle className={ready && orbiting ? 'gravity-capture gravity-capture-ready' : 'gravity-capture'} cx={leg.destination.x} cy={leg.destination.y} r={CAPTURE_RADIUS + 5}/>
-        <circle cx={leg.destination.x} cy={leg.destination.y} r="24" fill="#f1e9d4"/>
-        <path d={`M ${leg.destination.x - 7} ${leg.destination.y} h 14 m -7 -7 v 14`} stroke="#2945a6" strokeWidth="2"/>
-        <text x={leg.destination.x} y={leg.destination.y + 55} textAnchor="middle" className="gravity-map-label">DELIVER HERE</text>
-        {leg.obstacles.map((moon, i) => <g key={i}><circle cx={moon.x} cy={moon.y} r={moon.radius} fill="#152a75" stroke="#7b8dc2" strokeWidth="1.5"/><circle cx={moon.x - 6} cy={moon.y - 5} r="5" fill="#243d8b"/><circle cx={moon.x + 8} cy={moon.y + 7} r="3" fill="#243d8b"/></g>)}
-        <circle cx={leg.anchor.x} cy={leg.anchor.y} r={ORBIT_RADIUS} className="gravity-orbit"/>
-        <circle cx={leg.anchor.x} cy={leg.anchor.y} r="23" fill="#ece3cc"/>
-        <ellipse cx={leg.anchor.x} cy={leg.anchor.y} rx="29" ry="8" fill="none" stroke="#bcbba8" strokeWidth="2" transform={`rotate(-28 ${leg.anchor.x} ${leg.anchor.y})`}/>
-        {orbiting && <g className={ready ? 'gravity-path gravity-path-ready' : 'gravity-path'}><line x1={from.x} y1={from.y} x2={previewEnd.x} y2={previewEnd.y}/><circle cx={previewEnd.x} cy={previewEnd.y} r="2"/></g>}
-        <circle cx={session.point.x} cy={session.point.y} r="10" fill="#ffc466" opacity=".14"/>
-        <circle cx={session.point.x} cy={session.point.y} r="5" fill="#ffc466" stroke="#fff2d4" strokeWidth="1.5"/>
-        {session.phase === 'delivery' && <text x="180" y="176" textAnchor="middle" className="gravity-delivered">DELIVERED ✓</text>}
+    <div className="gravity-score"><span>DEPTH <strong>{String(session.depth + 1).padStart(3, '0')}</strong></span><span>CAPTURES <strong>{session.score}</strong></span><span>TETHERS <strong>{session.tethers}/3</strong></span></div>
+    <div className={`gravity-field${revealing ? ' is-revealing' : ''}`}>
+      <svg viewBox="0 0 360 350" role="img" aria-label={`Chamber ${session.depth + 1}, ${chamber.name}. Real anchor: two attached notches. Phantom: one notch and broken offset ring. Dashed path is the previous capture, not a target.`}>
+        <defs><pattern id="false-orbit-scratches" width="37" height="43" patternUnits="userSpaceOnUse"><path d="M2 8h11 M30 29h5 M19 39h2" stroke="currentColor" strokeWidth=".5"/></pattern></defs>
+        <rect width="360" height="350" fill="url(#false-orbit-scratches)" opacity=".2"/>
+        <path d="M180 0v350 M0 175h360" className="gravity-grid"/>
+        <text x="13" y="21" className="gravity-map-label">MASS REGISTER / {String(session.depth + 1).padStart(3, '0')}</text>
+        <text x="13" y="337" className="gravity-map-label">{revealing ? 'EXPOSURE / CLOCK ARRESTED' : 'OBSERVATION IS NOT EVIDENCE'}</text>
+        {session.ghost && <g className="gravity-ghost"><line x1={session.ghost.from.x} y1={session.ghost.from.y} x2={session.ghost.to.x} y2={session.ghost.to.y}/><circle cx={session.ghost.imprint.x} cy={session.ghost.imprint.y} r="31" strokeDasharray="4 9"/><text x={session.ghost.from.x} y={session.ghost.from.y - 12}>PREVIOUS / NOT MASS</text></g>}
+        {chamber.phantoms.map((point, i) => <Anchor key={i} point={point} real={false} revealed={revealing}/>)}
+        <Anchor point={chamber.destination} real revealed={revealing}/>
+        {chamber.obstacles.map((body, i) => <g key={i} className="gravity-debris"><circle cx={body.x} cy={body.y} r={body.radius}/><path d={`M${body.x - 8} ${body.y - 8}l16 16 m0 -16l-16 16`}/></g>)}
+        <circle cx={chamber.anchor.x} cy={chamber.anchor.y} r={ORBIT_RADIUS} className="gravity-orbit"/>
+        <circle cx={chamber.anchor.x} cy={chamber.anchor.y} r="14" className="gravity-source"/>
+        <path d={`M${chamber.anchor.x - 20} ${chamber.anchor.y}h40 M${chamber.anchor.x} ${chamber.anchor.y - 20}v40`} className="gravity-grid"/>
+        {orbiting && <line className="gravity-path" x1={session.point.x} y1={session.point.y} x2={session.point.x + direction.x * 120} y2={session.point.y + direction.y * 120}/>}
+        {session.phase === 'ended' && session.failure && <line className="gravity-failure" x1={session.failure.from.x} y1={session.failure.from.y} x2={session.failure.to.x} y2={session.failure.to.y}/>}
+        <circle cx={session.point.x} cy={session.point.y} r="5" className="gravity-body"/>
       </svg>
       {overlay && <div className="gravity-overlay"><div className="gravity-panel">
-        <p className="gravity-eyebrow">{session.paused ? 'Take a breath' : session.phase === 'complete' ? 'All parcels accounted for' : 'Borrow an orbit. Find your moment.'}</p>
-        <h2>{session.paused ? 'Orbit on hold.' : session.phase === 'complete' ? 'Beautifully delivered.' : 'Let go at just the right time.'}</h2>
-        <p>{session.paused ? 'Your courier is exactly where you left it.' : session.phase === 'complete' ? `Six planets reached, with ${session.misses} ${session.misses === 1 ? 'miss' : 'misses'} along the way. Every retry was part of the journey.` : 'You orbit automatically. Tap Launch when the dotted path points into the glowing destination. You fly straight from there.'}</p>
-        {session.phase === 'intro' && <p className="gravity-panel-note">Six routes · unlimited retries · no rush<br/>Avoid dark moons. Misses return to your last anchor.</p>}
-        <button className="gravity-primary" onClick={session.paused ? () => update({ ...current.current, paused: false, message: 'Back in orbit. Take your time.' }) : start}>{session.paused ? 'Resume orbit' : session.phase === 'complete' ? 'Deliver again ↗' : 'Start the route ↗'}</button>
+        <p className="gravity-eyebrow">{session.paused ? 'INSTRUMENT SUSPENDED' : session.phase === 'ended' ? 'FINAL OBSERVATION' : 'THERE IS NO FINAL CHAMBER'}</p>
+        <h2>{session.paused ? 'Nothing moves.' : session.phase === 'ended' ? 'The tether was real.' : 'Do not trust the circle.'}</h2>
+        {session.paused ? <p>Orbit, flight, exposure and collapse clock are frozen. Resume manually.</p> : session.phase === 'ended' ? <><p>{session.failure?.reason}</p>
+          <svg className="gravity-snapshot" viewBox="0 0 360 350" role="img" aria-label="Final chamber snapshot. Amber dashed line shows the failed trajectory; double notches identify the real anchor.">
+            {chamber.phantoms.map((point, i) => <Anchor key={i} point={point} real={false} revealed={false}/>)}
+            <Anchor point={chamber.destination} real revealed={false}/>
+            {chamber.obstacles.map((body, i) => <circle key={i} className="gravity-debris" cx={body.x} cy={body.y} r={body.radius}/>)}
+            <circle className="gravity-orbit" cx={chamber.anchor.x} cy={chamber.anchor.y} r={ORBIT_RADIUS}/>
+            {session.failure && <line className="gravity-failure" x1={session.failure.from.x} y1={session.failure.from.y} x2={session.failure.to.x} y2={session.failure.to.y}/>}
+            <circle className="gravity-body" cx={session.point.x} cy={session.point.y} r="5"/>
+          </svg><p>Depth {session.depth + 1} · {session.score} captures. Dashed amber: final path. All three tethers severed.</p></> : <>
+          <p>Orbit is automatic. <b>Tap and release to launch.</b> Hold ¼ second to reveal: orbit and clock freeze. Release a hold without launching.</p>
+          <p><b>Real: two attached notches.</b> Phantom: one notch, broken offset ring. Fly through phantoms; they never catch you. Dashed afterimages are old paths.</p>
+          <p>Debris, escape or two revolutions cost a tether. Three tethers. Captures restore exposure. Depth never ends.</p>
+        </>}
+        <button className="gravity-primary" onClick={session.paused ? pause : start}>{session.paused ? 'Resume observation' : session.phase === 'ended' ? 'Retry / new observation' : 'Enter the instrument'}</button>
       </div></div>}
     </div>
-    <div className="gravity-route"><span>0{session.leg + 1} / 06</span><strong>{leg.name}</strong><div aria-hidden="true">{LEGS.map((_, i) => <i key={i} className={i < session.deliveries ? 'is-done' : i === session.leg ? 'is-current' : ''}/>)}</div></div>
-    <p className="gravity-message" role="status" aria-live="polite">{session.message}</p>
-    <div className="gravity-controls">
-      <button data-gravity-launch className={`gravity-launch${ready && orbiting ? ' is-ready' : ''}`} disabled={!orbiting || session.paused} onPointerDown={event => { if (event.button === 0) { event.preventDefault(); launch(); } }} onClick={event => { if (event.detail === 0) launch(); }}>
-        <span>{session.phase === 'flight' ? 'In flight…' : session.phase === 'delivery' ? 'Parcel delivered ✓' : 'Launch courier ↗'}</span><small>{ready && orbiting ? 'Clear path to destination' : 'Tap or press Space'}</small>
-      </button>
-      <label className="gravity-practice"><input type="checkbox" checked={practice} onChange={event => setPractice(event.target.checked)}/> Show full practice path</label>
-    </div>
+    <div className="gravity-route"><span>{chamber.name}</span><span>{Math.max(0, (2 * TAU / ORBIT_SPEED - session.orbitElapsed)).toFixed(1)}s to collapse</span></div>
+    <div className="gravity-exposure"><label htmlFor="gravity-exposure">EXPOSURE {session.reveal.toFixed(1)}s / 1.2s</label><meter id="gravity-exposure" min="0" max={REVEAL_MAX} value={session.reveal}/></div>
+    <p className="gravity-message" role="status">{session.message}</p>
+    <button data-gravity-launch className="gravity-launch" disabled={!orbiting || session.paused}
+      onPointerDown={event => { if (event.button === 0 && pointer.current === null) { event.preventDefault(); pointer.current = event.pointerId; event.currentTarget.setPointerCapture(event.pointerId); down(); } }}
+      onPointerUp={event => { if (event.pointerId === pointer.current) { event.preventDefault(); pointer.current = null; up(); } }}
+      onPointerCancel={event => { if (pointer.current === event.pointerId) { pointer.current = null; update({ ...synchronize(), held: null }); } }}
+      onLostPointerCapture={event => { if (pointer.current === event.pointerId) { pointer.current = null; update({ ...synchronize(), held: null }); } }}
+      onContextMenu={event => event.preventDefault()}
+      onClick={event => { if (event.detail === 0 && current.current.held === null && performance.now() - lastRelease.current > 100) update(release(press(synchronize()))); }}>
+      <span>{session.phase === 'flight' ? 'TRAJECTORY COMMITTED' : revealing ? 'REVEAL / CLOCK FROZEN' : session.held !== null && session.held >= HOLD_SECONDS ? 'EXPOSURE EXHAUSTED' : 'TAP TO LAUNCH / HOLD TO REVEAL'}</span>
+      <small>Release a short press to launch · hold release never launches · Space / Enter</small>
+    </button>
+    <p className="gravity-legend">Ⅱ attached = real · broken / offset = phantom · × = debris</p>
   </section>;
 }

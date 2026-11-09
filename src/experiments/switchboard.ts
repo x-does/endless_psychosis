@@ -1,36 +1,49 @@
-export const DESTINATIONS = ["Moon", "Key", "Wave", "Star"] as const;
-export type Destination = typeof DESTINATIONS[number];
-export type Caller = { id:number; destination:Destination; arrived:number; patience:number; duration:number; value:number; slot:number };
-export type Connection = { caller:Caller; ends:number };
-export type SwitchState = { time:number; next:number; waiting:Caller[]; active:Connection[]; completed:number; score:number; missed:number; finished:boolean };
-export function newShift():SwitchState { return {time:0,next:0,waiting:[],active:[],completed:0,score:0,missed:0,finished:false}; }
-export function arrivalTime(id:number) { return id<3 ? 2+id*6 : 20+(id-3)*3.4; }
-export function advanceShift(previous:SwitchState, seconds:number):SwitchState {
-  if(previous.finished || seconds<=0) return previous;
-  const s:SwitchState={...previous,waiting:[...previous.waiting],active:[...previous.active]};
-  const target=Math.min(120,s.time+seconds);
-  // Resolve events chronologically, so frame rate cannot change outcomes.
-  while(s.time<target) {
-    const arrival=arrivalTime(s.next);
-    const event=Math.min(target,...s.active.map(c=>c.ends),...s.waiting.map(c=>c.arrived+c.patience),arrival<=104?arrival:Infinity);
-    s.time=event;
-    const done=s.active.filter(c=>c.ends<=event);
-    s.completed+=done.length; s.score+=done.reduce((sum,c)=>sum+c.caller.value,0);
-    s.active=s.active.filter(c=>c.ends>event);
-    s.missed+=s.waiting.filter(c=>c.arrived+c.patience<=event).length;
-    s.waiting=s.waiting.filter(c=>c.arrived+c.patience>event);
-    if(arrival<=event && arrival<=104) {
-      const id=s.next++; const kind=id%3;
-      const slot=[0,1,2,3,4,5].find(i=>!s.waiting.some(c=>c.slot===i));
-      if(slot===undefined) s.missed++;
-      else s.waiting.push({id,destination:DESTINATIONS[(id*3+Math.floor(id/4))%4],arrived:arrival,patience:[16,22,10][kind],duration:[4,10,7][kind],value:[1,3,2][kind],slot});
-    }
-  }
-  if(s.time>=120) {s.finished=true;s.missed+=s.waiting.length+s.active.length;s.waiting=[];s.active=[];}
-  return s;
+export const ROUTES = ["NORTH", "VOID", "HOME"] as const;
+export const ARCHIVE_LIMIT = 24;
+export type Route = typeof ROUTES[number];
+export type Packet = { id:number; route:Route; sequence:number; seal:boolean; deadline:number; slot:number; checked?:boolean };
+export type Transmission = { packet:Packet; ends:number };
+export type FrequencyState = { beat:number; integrity:number; score:number; delivered:number; rejected:number; next:number; packets:Packet[]; channels:Transmission[]; ledger:Record<Route,number>; archive:Packet[]; pending:Packet|null; message:string; ended:boolean };
+export type FrequencyAction = {type:"transmit"|"discard"|"challenge";id:number}|{type:"advance"};
+export function newReceiver():FrequencyState {
+  const s:FrequencyState={beat:0,integrity:4,score:0,delivered:0,rejected:0,next:0,packets:[],channels:[],ledger:{NORTH:0,VOID:0,HOME:0},archive:[],pending:null,message:"The first transmission is original. Read its seal and sequence.",ended:false};
+  return arrive(s);
 }
-export function connectCaller(s:SwitchState,id:number,destination:Destination):SwitchState {
-  const caller=s.waiting.find(c=>c.id===id);
-  if(s.finished || !caller || caller.destination!==destination || s.active.length>=3) return s;
-  return {...s,waiting:s.waiting.filter(c=>c.id!==id),active:[...s.active,{caller,ends:s.time+caller.duration}]};
+export function authentic(s:FrequencyState,p:Packet) { return p.seal && p.sequence>s.ledger[p.route]; }
+export function evidence(s:FrequencyState,p:Packet) { return !p.seal?"BROKEN SEAL — one bracket is missing.":p.sequence<=s.ledger[p.route]?`REPLAY — ${p.route} ${p.sequence} was already accepted.`:`ORIGINAL — intact seal; ${p.sequence} is above ledger ${s.ledger[p.route]}.`; }
+function createPacket(s:FrequencyState):Packet {
+  const id=s.next; const route=ROUTES[Math.floor(id/3)%3];
+  if(id%3===2 && s.archive.length) {const old=s.archive[Math.floor(id/3)%s.archive.length];return {...old,id,slot:0,checked:false,deadline:s.beat+6};}
+  return {id,route,sequence:Math.floor(id/3)+1,seal:id%3!==1,deadline:s.beat+6,slot:0};
+}
+function arrive(s:FrequencyState):FrequencyState {
+  const packet=s.pending??createPacket(s);const next=s.pending?s.next:s.next+1;const slot=[0,1,2,3].find(i=>!s.packets.some(p=>p.slot===i));
+  if(slot===undefined)return {...s,next,pending:packet};
+  return {...s,next,pending:null,packets:[...s.packets,{...packet,slot,deadline:s.beat+6}]};
+}
+export function actReceiver(previous:FrequencyState,action:FrequencyAction):FrequencyState {
+  if(previous.ended)return previous;
+  let s:FrequencyState={...previous,packets:previous.packets.map(p=>({...p})),channels:[...previous.channels],ledger:{...previous.ledger},archive:[...previous.archive]};
+  if(action.type!=="advance") {
+    const p=s.packets.find(p=>p.id===action.id);if(!p)return previous;
+    const valid=authentic(s,p);
+    if(action.type==="challenge") {p.checked=true;s.message=evidence(s,p);}
+    else if(action.type==="discard") {
+      s.packets=s.packets.filter(x=>x.id!==p.id);
+      if(valid){s.integrity--;s.message=`FAULT: discarded an original. ${evidence(s,p)}`;}else{s.score+=5;s.rejected++;s.message=`Echo erased. ${evidence(s,p)}`;}
+    } else {
+      if(s.channels.length>=2)return {...previous,message:"Both channels occupied. Discard an echo or advance one beat."};
+      s.packets=s.packets.filter(x=>x.id!==p.id);
+      if(valid){s.ledger[p.route]=p.sequence;s.archive=[...s.archive,p].slice(-ARCHIVE_LIMIT);s.channels.push({packet:p,ends:s.beat+3});s.message="Sequence reserved. The same packet can never be accepted twice.";}
+      else{s.integrity--;s.message=`FAULT: transmitted an echo. ${evidence(s,p)}`;}
+    }
+  } else s.message="One beat passes. The receiver remembers.";
+  s.beat++;
+  const completed=s.channels.filter(c=>c.ends<=s.beat);s.delivered+=completed.length;s.score+=completed.length*10;
+  s.channels=s.channels.filter(c=>c.ends>s.beat);
+  for(const p of s.packets.filter(p=>p.deadline<=s.beat))if(authentic(s,p)){s.integrity--;s.message=`FAULT: original ${p.route} ${p.sequence} expired. Its seal was intact and its sequence was new.`;}
+  s.packets=s.packets.filter(p=>p.deadline>s.beat);
+  s.integrity=Math.max(0,s.integrity);s.ended=s.integrity===0;
+  if(!s.ended && (s.pending || s.beat%2===0)) s=arrive(s);
+  return s;
 }
